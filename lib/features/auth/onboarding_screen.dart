@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
+import 'login_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -12,39 +13,54 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
 
+  // Datos actualizados basados en la visión del cliente
   final List<Map<String, String>> _onboardingData = [
     {
-      "title": "Diagnóstico por IA",
-      "desc": "Escanea tu piel en segundos y recibe un análisis preventivo impulsado por redes neuronales.",
-      "icon": "auto_awesome"
+      "title": "Bienvenido a HealSkin",
+      "desc": "Tu compañero inteligente para el cuidado y preservación de la salud de tu piel.",
+      "icon": "spa_outlined"
     },
     {
-      "title": "Conexión Médica",
-      "desc": "Telemedicina integrada. Habla con especialistas y comparte tus resultados de forma encriptada.",
-      "icon": "videocam"
+      "title": "Análisis con IA",
+      "desc": "Realiza diagnósticos asistidos y monitoreo longitudinal con tecnología de vanguardia.",
+      "icon": "biotech_outlined"
     },
     {
-      "title": "Monitoreo Evolutivo",
-      "desc": "Sigue tu progreso en el tiempo con una línea de tiempo clínica inteligente.",
-      "icon": "timeline"
+      "title": "Red de Guardianes",
+      "desc": "Conéctate con especialistas a través de telemedicina y encuentra centros dermatológicos cercanos.",
+      "icon": "medical_services_outlined"
     }
   ];
 
   IconData _getIcon(String iconName) {
     switch (iconName) {
-      case "auto_awesome": return Icons.auto_awesome;
-      case "videocam": return Icons.videocam;
-      case "timeline": return Icons.timeline;
-      default: return Icons.info;
+      case "spa_outlined": return Icons.spa_outlined;
+      case "biotech_outlined": return Icons.biotech_outlined;
+      case "medical_services_outlined": return Icons.medical_services_outlined;
+      default: return Icons.info_outline;
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.backgroundDark,
+      backgroundColor: AppColors.backgroundLight, // Ahora es blanco
       body: Stack(
         children: [
+          // Ondas de color decorativas de fondo (típico del diseño skincare)
+          Positioned(
+            top: -100,
+            right: -100,
+            child: Container(
+              width: 300,
+              height: 300,
+              decoration: BoxDecoration(
+                color: AppColors.surfaceDark.withValues(alpha: 0.5),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+
           PageView.builder(
             controller: _pageController,
             onPageChanged: (index) {
@@ -55,40 +71,48 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             itemCount: _onboardingData.length,
             itemBuilder: (context, index) {
               return Padding(
-                padding: const EdgeInsets.all(40.0),
+                padding: const EdgeInsets.symmetric(horizontal: 40.0),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Icono estilizado
                     Container(
-                      padding: const EdgeInsets.all(20),
+                      padding: const EdgeInsets.all(30),
                       decoration: BoxDecoration(
                         color: AppColors.surfaceDark,
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: AppColors.glassOverlay),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.primary.withValues(alpha: 0.1),
+                            blurRadius: 20,
+                            offset: const Offset(0, 10),
+                          )
+                        ],
                       ),
                       child: Icon(
                         _getIcon(_onboardingData[index]["icon"]!),
-                        size: 48,
-                        color: AppColors.secondary,
+                        size: 80,
+                        color: AppColors.primary,
                       ),
                     ),
-                    const SizedBox(height: 40),
+                    const SizedBox(height: 60),
                     Text(
                       _onboardingData[index]["title"]!,
+                      textAlign: TextAlign.center,
                       style: const TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.surfaceLight,
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
                         height: 1.2,
                       ),
                     ),
                     const SizedBox(height: 20),
                     Text(
                       _onboardingData[index]["desc"]!,
-                      style: TextStyle(
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
                         fontSize: 16,
-                        color: AppColors.surfaceLight.withOpacity(0.7),
+                        color: AppColors.textSecondary,
                         height: 1.5,
                       ),
                     ),
@@ -100,13 +124,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
           // Indicadores y Botón de Acción
           Positioned(
-            bottom: 50,
+            bottom: 60,
             left: 40,
             right: 40,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Column(
               children: [
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: List.generate(
                     _onboardingData.length,
                         (index) => AnimatedContainer(
@@ -115,47 +139,56 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       height: 8,
                       width: _currentPage == index ? 24 : 8,
                       decoration: BoxDecoration(
-                        color: _currentPage == index ? AppColors.secondary : AppColors.surfaceDark,
+                        color: _currentPage == index ? AppColors.primary : AppColors.secondary.withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),
                   ),
                 ),
-                GestureDetector(
-                  onTap: () {
-                    if (_currentPage == _onboardingData.length - 1) {
-                      // Aquí navegaremos al Login en el próximo Sprint
-                      debugPrint("Navegar al Login");
-                    } else {
-                      _pageController.nextPage(
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeInOut,
-                      );
-                    }
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      borderRadius: BorderRadius.circular(30),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.primary.withOpacity(0.3),
-                          blurRadius: 15,
-                          offset: const Offset(0, 5),
-                        )
-                      ],
+                const SizedBox(height: 40),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      if (_currentPage == _onboardingData.length - 1) {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(builder: (_) => const LoginScreen()),
+                        );
+                      } else {
+                        _pageController.nextPage(
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeInOut,
+                        );
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      elevation: 5,
+                      shadowColor: AppColors.primary.withValues(alpha: 0.4),
                     ),
                     child: Text(
                       _currentPage == _onboardingData.length - 1 ? "Comenzar" : "Siguiente",
                       style: const TextStyle(
-                        color: Colors.white,
+                        fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        fontSize: 16,
                       ),
                     ),
                   ),
-                )
+                ),
+                if (_currentPage != _onboardingData.length - 1)
+                  TextButton(
+                    onPressed: () => _pageController.jumpToPage(_onboardingData.length - 1),
+                    child: const Text(
+                      "Saltar",
+                      style: TextStyle(color: AppColors.textSecondary),
+                    ),
+                  ),
               ],
             ),
           )
