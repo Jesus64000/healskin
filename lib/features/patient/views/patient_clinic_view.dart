@@ -1,14 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../auth/profile_provider.dart'; // Importamos el provider
 
-class PatientClinicView extends StatelessWidget {
+class PatientClinicView extends ConsumerWidget {
   const PatientClinicView({super.key});
 
+  // Función auxiliar para mapear el string del icono a un IconData real
+  IconData _getIconData(String? iconName) {
+    switch (iconName) {
+      case 'person_3': return Icons.person_3;
+      case 'person_4': return Icons.person_4;
+      case 'person_2': return Icons.person_2;
+      default: return Icons.person;
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final doctorsAsync = ref.watch(doctorsListProvider);
+
     return CustomScrollView(
       slivers: [
-        // Nuevo Header Luminoso
         SliverAppBar(
           expandedHeight: 80,
           floating: true,
@@ -23,7 +36,6 @@ class PatientClinicView extends StatelessWidget {
           ),
         ),
 
-        // Contenido Principal
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
@@ -33,13 +45,24 @@ class PatientClinicView extends StatelessWidget {
                 _buildPriorityBanner(),
                 const SizedBox(height: 30),
 
-                // Lista de Médicos (Extraídos exactamente del PDF)
-                _buildDoctorTile("Dr. Bailey Dupont", "Consultas: Lunes", Icons.person),
-                _buildDoctorTile("Dra. Donna Stroupe", "Consultas: Viernes", Icons.person_3),
-                _buildDoctorTile("Dra. Juliana Silva", "Consultas: Miércoles", Icons.person_4),
-                _buildDoctorTile("Dr. Connor Hamilton", "Consultas: Jueves", Icons.person_2),
+                // LÓGICA DINÁMICA DE SUPABASE
+                doctorsAsync.when(
+                  data: (doctors) => Column(
+                    children: doctors.map((doc) => _buildDoctorTile(
+                        doc['full_name'],
+                        doc['availability'] ?? 'No disponible',
+                        _getIconData(doc['avatar_type'])
+                    )).toList(),
+                  ),
+                  loading: () => const Center(
+                      child: CircularProgressIndicator(color: AppColors.primary)
+                  ),
+                  error: (err, stack) => Center(
+                      child: Text("Error al cargar médicos: $err")
+                  ),
+                ),
 
-                const SizedBox(height: 40), // Espacio extra para el scroll de la barra inferior
+                const SizedBox(height: 40),
               ],
             ),
           ),
@@ -48,15 +71,17 @@ class PatientClinicView extends StatelessWidget {
     );
   }
 
-  // 1. Banner "Tu salud, es Nuestra Prioridad"
+  // Los widgets _buildPriorityBanner y _buildDoctorTile se quedan IGUAL
+  // (Solo recuerda cambiar .withOpacity a .withValues para evitar warnings)
+
   Widget _buildPriorityBanner() {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppColors.surfaceDark, // El tono durazno ultra claro
+        color: AppColors.surfaceDark,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -64,24 +89,17 @@ class PatientClinicView extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                    "Tu salud, es",
-                    style: TextStyle(color: AppColors.textPrimary, fontSize: 18)
-                ),
-                Text(
-                  "Nuestra Prioridad",
-                  style: TextStyle(color: AppColors.primary, fontSize: 22, fontWeight: FontWeight.bold),
-                ),
+                const Text("Tu salud, es", style: TextStyle(color: AppColors.textPrimary, fontSize: 18)),
+                Text("Nuestra Prioridad", style: TextStyle(color: AppColors.primary, fontSize: 22, fontWeight: FontWeight.bold)),
               ],
             ),
           ),
-          // Icono decorativo para el banner
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
                 color: Colors.white,
                 shape: BoxShape.circle,
-                boxShadow: [BoxShadow(color: AppColors.primary.withOpacity(0.2), blurRadius: 10)]
+                boxShadow: [BoxShadow(color: AppColors.primary.withValues(alpha: 0.2), blurRadius: 10)]
             ),
             child: const Icon(Icons.favorite, color: AppColors.primary, size: 30),
           )
@@ -90,22 +108,20 @@ class PatientClinicView extends StatelessWidget {
     );
   }
 
-  // 2. Tarjeta de Médico Estilizada
   Widget _buildDoctorTile(String name, String schedule, IconData avatarIcon) {
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
-          color: Colors.white, // Blanco puro para resaltar sobre el fondo light
+          color: Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.black.withOpacity(0.05)),
+          border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))
+            BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10, offset: const Offset(0, 4))
           ]
       ),
       child: Row(
         children: [
-          // Avatar del Médico
           Container(
             width: 50,
             height: 50,
@@ -116,30 +132,20 @@ class PatientClinicView extends StatelessWidget {
             child: Icon(avatarIcon, color: AppColors.textSecondary, size: 30),
           ),
           const SizedBox(width: 15),
-
-          // Datos del Médico
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                    name,
-                    style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16)
-                ),
+                Text(name, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16)),
                 const SizedBox(height: 4),
-                Text(
-                    schedule,
-                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)
-                ),
+                Text(schedule, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
               ],
             ),
           ),
-
-          // Botón de Acción (Agendar/Chat)
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppColors.secondary.withOpacity(0.1), // Lavanda muy suave
+              color: AppColors.secondary.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(Icons.calendar_month_outlined, color: AppColors.secondary),

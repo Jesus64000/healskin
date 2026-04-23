@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart'; // Asegúrate de tener intl en pubspec.yaml
 import '../../../core/theme/app_colors.dart';
+import '../../auth/profile_provider.dart';
 
-class PatientTimelineView extends StatelessWidget {
+class PatientTimelineView extends ConsumerWidget {
   const PatientTimelineView({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final timelineAsync = ref.watch(skinTimelineProvider);
+
     return CustomScrollView(
       slivers: [
-        // Header Luminoso
         SliverAppBar(
           expandedHeight: 80,
           floating: true,
@@ -26,28 +30,25 @@ class PatientTimelineView extends StatelessWidget {
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.all(20.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildTimelineItem(
-                  date: "Hoy",
-                  title: "Mejora detectada",
-                  desc: "La IA detecta una reducción del 15% en la inflamación de la zona T.",
-                  isSuccess: true,
-                ),
-                _buildTimelineItem(
-                  date: "Hace 1 semana",
-                  title: "Alerta Leve",
-                  desc: "Brote de acné detectado en la mejilla derecha. Se recomienda limpieza profunda.",
-                  isWarning: true,
-                ),
-                _buildTimelineItem(
-                  date: "Hace 1 mes",
-                  title: "Escaneo Inicial",
-                  desc: "Registro base del estado de la piel completado satisfactoriamente.",
-                ),
-                const SizedBox(height: 40),
-              ],
+            child: timelineAsync.when(
+              data: (events) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: events.map((event) {
+                  // Formateo básico de fecha
+                  final DateTime date = DateTime.parse(event['created_at']);
+                  final String dateLabel = DateFormat('dd MMM, yyyy').format(date);
+
+                  return _buildTimelineItem(
+                    date: dateLabel,
+                    title: event['title'],
+                    desc: event['description'] ?? '',
+                    isSuccess: event['event_type'] == 'success',
+                    isWarning: event['event_type'] == 'warning',
+                  );
+                }).toList(),
+              ),
+              loading: () => const Center(child: CircularProgressIndicator(color: AppColors.primary)),
+              error: (err, stack) => Center(child: Text("Error al cargar evolución: $err")),
             ),
           ),
         ),
@@ -76,35 +77,37 @@ class PatientTimelineView extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Columna de la línea (Indicador visual)
         Column(
           children: [
             Icon(itemIcon, color: itemColor, size: 22),
             Container(
               width: 2,
-              height: 80,
+              height: 100, // Ajustado para dar más espacio
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [itemColor.withOpacity(0.5), AppColors.secondary.withOpacity(0.1)],
+                  colors: [
+                    itemColor.withValues(alpha: 0.5),
+                    AppColors.secondary.withValues(alpha: 0.1)
+                  ],
                 ),
               ),
             ),
           ],
         ),
         const SizedBox(width: 15),
-        // Tarjeta de información
         Expanded(
           child: Container(
+            margin: const EdgeInsets.only(bottom: 20),
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.black.withOpacity(0.05)),
+              border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
               boxShadow: [
                 BoxShadow(
-                    color: Colors.black.withOpacity(0.02),
+                    color: Colors.black.withValues(alpha: 0.02),
                     blurRadius: 10,
                     offset: const Offset(0, 4)
                 )

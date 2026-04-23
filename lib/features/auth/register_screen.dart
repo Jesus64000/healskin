@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_colors.dart';
 import 'auth_provider.dart';
+import 'initial_quiz_screen.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -83,7 +84,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 if (!context.mounted) return;
 
                 if (errorMsg == null) {
-                  Navigator.of(context).pop();
+                  if (!context.mounted) return;
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(builder: (_) => const InitialQuizScreen()),
+                  );
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(

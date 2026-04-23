@@ -2,15 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../auth/auth_provider.dart';
+import '../../auth/profile_provider.dart'; // Importamos el nuevo provider
 
 class PatientProfileView extends ConsumerWidget {
   const PatientProfileView({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Escuchamos los datos del perfil
+    final profileAsync = ref.watch(userProfileProvider);
+    final authState = ref.watch(authProvider);
+
     return CustomScrollView(
       slivers: [
-        // Header con fondo suave
         SliverAppBar(
           expandedHeight: 80,
           floating: true,
@@ -24,7 +28,6 @@ class PatientProfileView extends ConsumerWidget {
             ),
           ),
           actions: [
-            // Botón de salir más discreto pero elegante
             IconButton(
               icon: const Icon(Icons.power_settings_new, color: AppColors.danger),
               onPressed: () => ref.read(authProvider.notifier).logout(),
@@ -33,67 +36,80 @@ class PatientProfileView extends ConsumerWidget {
         ),
 
         SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              children: [
-                // Avatar con estilo Skincare
-                Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: const BoxDecoration(
-                    color: AppColors.primary,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const CircleAvatar(
-                      radius: 55,
-                      backgroundColor: Colors.white,
-                      child: Icon(Icons.person, size: 60, color: AppColors.primary)
-                  ),
-                ),
-                const SizedBox(height: 20),
-                const Text(
-                    "Benito Bene",
-                    style: TextStyle(color: AppColors.textPrimary, fontSize: 24, fontWeight: FontWeight.bold)
-                ),
-                const Text(
-                    "benito.bene@healskin.com",
-                    style: TextStyle(color: AppColors.textSecondary, fontSize: 14)
-                ),
-                const SizedBox(height: 40),
+          child: profileAsync.when(
+            // 1. ESTADO: DATOS CARGADOS
+            data: (profile) {
+              final String name = profile?['full_name'] ?? "Usuario";
+              final String email = authState.session?.user.email ?? "Sin correo";
 
-                // Grupo de Ajustes
-                _buildSettingsTile(
-                    Icons.medical_information_outlined,
-                    "Historial Médico",
-                    "Tus antecedentes y alergias",
-                    AppColors.primary
-                ),
-                _buildSettingsTile(
-                    Icons.shield_moon_outlined,
-                    "Privacidad",
-                    "Datos y consentimiento",
-                    AppColors.secondary
-                ),
-                _buildSettingsTile(
-                    Icons.notifications_none_rounded,
-                    "Notificaciones",
-                    "Alertas de IA y citas",
-                    AppColors.warning
-                ),
-                _buildSettingsTile(
-                    Icons.help_outline_rounded,
-                    "Ayuda y Soporte",
-                    "Preguntas frecuentes",
-                    AppColors.success
-                ),
+              return Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(
+                        color: AppColors.primary,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const CircleAvatar(
+                          radius: 55,
+                          backgroundColor: Colors.white,
+                          child: Icon(Icons.person, size: 60, color: AppColors.primary)
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                        name, // NOMBRE REAL DE SUPABASE
+                        style: const TextStyle(color: AppColors.textPrimary, fontSize: 24, fontWeight: FontWeight.bold)
+                    ),
+                    Text(
+                        email, // EMAIL REAL DE SUPABASE
+                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 14)
+                    ),
+                    const SizedBox(height: 40),
 
-                const SizedBox(height: 20),
-                const Text(
-                    "HealSkin v1.0.26",
-                    style: TextStyle(color: AppColors.textSecondary, fontSize: 10)
+                    _buildSettingsTile(
+                        Icons.medical_information_outlined,
+                        "Historial Médico",
+                        "Piel: ${profile?['skin_type'] ?? 'No definido'}", // MOSTRAR TIPO DE PIEL
+                        AppColors.primary
+                    ),
+                    _buildSettingsTile(
+                        Icons.shield_moon_outlined,
+                        "Privacidad",
+                        "Datos y consentimiento",
+                        AppColors.secondary
+                    ),
+                    _buildSettingsTile(
+                        Icons.notifications_none_rounded,
+                        "Notificaciones",
+                        "Alertas de IA y citas",
+                        AppColors.warning
+                    ),
+                    _buildSettingsTile(
+                        Icons.help_outline_rounded,
+                        "Ayuda y Soporte",
+                        "Preguntas frecuentes",
+                        AppColors.success
+                    ),
+
+                    const SizedBox(height: 20),
+                    const Text(
+                        "HealSkin v1.0.26",
+                        style: TextStyle(color: AppColors.textSecondary, fontSize: 10)
+                    ),
+                  ],
                 ),
-              ],
+              );
+            },
+            // 2. ESTADO: CARGANDO
+            loading: () => const SizedBox(
+              height: 300,
+              child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
             ),
+            // 3. ESTADO: ERROR
+            error: (err, stack) => Center(child: Text("Error al cargar perfil: $err")),
           ),
         ),
       ],
@@ -108,9 +124,9 @@ class PatientProfileView extends ConsumerWidget {
         decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.black.withOpacity(0.05)),
+            border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
             boxShadow: [
-              BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))
+              BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10, offset: const Offset(0, 4))
             ]
         ),
         child: Row(
@@ -118,7 +134,7 @@ class PatientProfileView extends ConsumerWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: iconColor.withOpacity(0.1),
+                color: iconColor.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(icon, color: iconColor),

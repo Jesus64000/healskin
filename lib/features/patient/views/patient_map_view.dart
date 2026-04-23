@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../auth/profile_provider.dart';
 
-class PatientMapView extends StatelessWidget {
+class PatientMapView extends ConsumerWidget {
   const PatientMapView({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Escuchamos la lista de centros de Supabase
+    final centersAsync = ref.watch(medicalCentersProvider);
+
     return CustomScrollView(
       slivers: [
-        // Header Luminoso
         SliverAppBar(
           expandedHeight: 80,
           floating: true,
@@ -23,7 +27,6 @@ class PatientMapView extends StatelessWidget {
           ),
         ),
 
-        // Contenido Principal
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
@@ -38,12 +41,26 @@ class PatientMapView extends StatelessWidget {
                 ),
                 const SizedBox(height: 15),
 
-                // Lista de Centros (Adaptada al nuevo diseño)
-                _buildCenterTile("Clínica Dermatológica Zulia", "Av. Universidad", "Abierto", true),
-                _buildCenterTile("Centro Estético HealSkin", "Centro Cívico Cabimas", "Cierra a las 5pm", false),
-                _buildCenterTile("Dermatología Especializada COL", "Carretera H", "Abierto", true),
+                // LÓGICA DINÁMICA
+                centersAsync.when(
+                  data: (centers) => Column(
+                    children: centers.map((center) => _buildCenterTile(
+                        center['name'],
+                        center['address'] ?? 'Dirección no disponible',
+                        center['status_text'] ?? 'Desconocido',
+                        center['is_open'] ?? false
+                    )).toList(),
+                  ),
+                  loading: () => const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(20.0),
+                        child: CircularProgressIndicator(color: AppColors.primary),
+                      )
+                  ),
+                  error: (err, stack) => Center(child: Text("Error: $err")),
+                ),
 
-                const SizedBox(height: 40), // Espacio extra para el scroll de la barra inferior
+                const SizedBox(height: 40),
               ],
             ),
           ),
@@ -52,15 +69,14 @@ class PatientMapView extends StatelessWidget {
     );
   }
 
-  // 1. Placeholder del Mapa
   Widget _buildMapPlaceholder() {
     return Container(
       height: 200,
       width: double.infinity,
       decoration: BoxDecoration(
-        color: AppColors.surfaceLight, // Gris ultra claro
+        color: AppColors.surfaceLight,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.black.withOpacity(0.05)),
+        border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -68,7 +84,7 @@ class PatientMapView extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(15),
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.1), // Salmón muy suave
+              color: AppColors.primary.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: const Icon(Icons.map_outlined, color: AppColors.primary, size: 40),
@@ -83,55 +99,43 @@ class PatientMapView extends StatelessWidget {
     );
   }
 
-  // 2. Tarjeta del Centro Médico
   Widget _buildCenterTile(String name, String location, String status, bool isOpen) {
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
-          color: Colors.white, // Blanco puro
+          color: Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.black.withOpacity(0.05)),
+          border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))
+            BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10, offset: const Offset(0, 4))
           ]
       ),
       child: Row(
         children: [
-          // Icono de ubicación
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-                color: AppColors.secondary.withOpacity(0.15), // Lavanda suave
+                color: AppColors.secondary.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12)
             ),
             child: const Icon(Icons.location_on, color: AppColors.secondary),
           ),
           const SizedBox(width: 15),
-
-          // Información del centro
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                    name,
-                    style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14)
-                ),
+                Text(name, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14)),
                 const SizedBox(height: 4),
-                Text(
-                    location,
-                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)
-                ),
+                Text(location, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
               ],
             ),
           ),
-
-          // Estado (Abierto/Cerrado)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
-                color: isOpen ? AppColors.success.withOpacity(0.1) : AppColors.warning.withOpacity(0.1),
+                color: isOpen ? AppColors.success.withValues(alpha: 0.1) : AppColors.warning.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8)
             ),
             child: Text(
