@@ -1,123 +1,157 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_colors.dart';
 
-// Importamos las vistas (por ahora usaremos el Home actualizado y placeholders para el resto)
+// 🚀 IMPORT CRÍTICO: Asegúrate de que esta ruta apunte a donde tienes tu userProfileProvider
+import '../auth/profile_provider.dart';
+
 import 'views/patient_home_view.dart';
 import 'views/patient_timeline_view.dart';
-import 'views/patient_clinic_view.dart';
-import 'views/patient_map_view.dart';
-import 'views/patient_profile_view.dart';
+import 'views/patient_appointments_view.dart';
+import 'views/patient_map_view.dart'; // 🚀 NUEVO IMPORT: Clínicas
+import '../ai_scanner/views/ai_scanner_view.dart';
 
-class PatientDashboard extends StatefulWidget {
+// Provider global para controlar reactivamente la pestaña activa del dashboard (2 es Inicio por defecto)
+final patientTabProvider = StateProvider<int>((ref) => 2);
+
+class PatientDashboard extends ConsumerStatefulWidget {
   const PatientDashboard({super.key});
 
   @override
-  State<PatientDashboard> createState() => _PatientDashboardState();
+  ConsumerState<PatientDashboard> createState() => _PatientDashboardState();
 }
 
-class _PatientDashboardState extends State<PatientDashboard> {
-  int _currentIndex = 2; // Inicia en la posición 2 (Inicio)
-
+class _PatientDashboardState extends ConsumerState<PatientDashboard> {
   late final List<Widget> _views;
 
   @override
   void initState() {
     super.initState();
-    // Orden exacto según el diseño del cliente: Médicos, Monitoreo, Inicio, IA, Perfil
     _views = [
-      const PatientClinicView(),    // 0: Médicos (Telemedicina)
-      const PatientTimelineView(),  // 1: Monitoreo
-      const PatientHomeView(),      // 2: Inicio (Hub)
-      const Center(child: Text("Módulo IA en construcción", style: TextStyle(color: AppColors.textPrimary))), // 3: IA
-      const PatientProfileView(),   // 4: Perfil
+      const PatientAppointmentsView(), // 0
+      const PatientTimelineView(),     // 1
+      const PatientHomeView(),         // 2 - Inicio en el centro
+      const PatientMapView(),          // 3 - Clínicas
+      const AiScannerView(),           // 4 - IA
     ];
+  }
+
+  Widget _buildBody(int currentIndex) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 250),
+      transitionBuilder: (Widget child, Animation<double> animation) {
+        return FadeTransition(opacity: animation, child: child);
+      },
+      child: _views[currentIndex],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final profileAsync = ref.watch(userProfileProvider);
+    final currentIndex = ref.watch(patientTabProvider);
+
     return Scaffold(
       backgroundColor: AppColors.backgroundLight,
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _views,
+      body: profileAsync.when(
+        data: (_) => _buildBody(currentIndex),
+        loading: () => const Center(child: CircularProgressIndicator(color: AppColors.primary)),
+        error: (err, stack) => Center(child: Text("Error de sincronización: $err")),
       ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-            color: Colors.white,
-            boxShadow: [
-              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, -5))
-            ]
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildNavItem(Icons.medical_services_outlined, "Médicos", 0),
-                _buildNavItem(Icons.monitor_heart_outlined, "Monitoreo", 1),
-                _buildCenterNavItem(Icons.home_outlined, "Inicio", 2),
-                _buildNavItem(Icons.psychology_outlined, "IA", 3),
-                _buildNavItem(Icons.person_outline, "Perfil", 4),
-              ],
-            ),
+      bottomNavigationBar: _buildBottomNav(currentIndex),
+    );
+  }
+
+  // --- COMPONENTES DE UI ---
+
+  Widget _buildBottomNav(int currentIndex) {
+    return Container(
+      decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 20, offset: const Offset(0, -5))
+          ]
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.only(top: 8, bottom: 8, left: 10, right: 10),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              _buildNavItem(Icons.calendar_month_outlined, "Citas", 0, currentIndex),
+              _buildNavItem(Icons.monitor_heart_outlined, "Evolución", 1, currentIndex),
+              _buildCenterNavItem(Icons.home_rounded, "Inicio", 2, currentIndex), // 🚀 Centralizado
+              _buildNavItem(Icons.map_outlined, "Clínicas", 3, currentIndex),
+              _buildNavItem(Icons.document_scanner_outlined, "IA", 4, currentIndex),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _buildNavItem(IconData icon, String label, int index) {
-    final isSelected = _currentIndex == index;
+  Widget _buildNavItem(IconData icon, String label, int index, int currentIndex) {
+    final isSelected = currentIndex == index;
     return GestureDetector(
-      onTap: () => setState(() => _currentIndex = index),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: isSelected ? AppColors.primary : AppColors.textSecondary, size: 26),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10,
-              color: isSelected ? AppColors.primary : AppColors.textSecondary,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+      behavior: HitTestBehavior.opaque,
+      onTap: () => ref.read(patientTabProvider.notifier).state = index,
+      child: SizedBox(
+        width: 64, // Incrementado para ajuste espacioso de 5 botones
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: EdgeInsets.only(bottom: isSelected ? 4.0 : 0.0),
+              child: Icon(
+                  icon,
+                  color: isSelected ? AppColors.primary : AppColors.textSecondary,
+                  size: isSelected ? 26 : 22
+              ),
             ),
-          )
-        ],
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10, // Aumentado a 10 para mejor legibilidad
+                color: isSelected ? AppColors.primary : AppColors.textSecondary,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              ),
+              overflow: TextOverflow.ellipsis,
+            )
+          ],
+        ),
       ),
     );
   }
 
-  // El botón central ("Inicio") tiene un círculo salmón de fondo según el diseño
-  Widget _buildCenterNavItem(IconData icon, String label, int index) {
-    final isSelected = _currentIndex == index;
+  Widget _buildCenterNavItem(IconData icon, String label, int index, int currentIndex) {
+    final isSelected = currentIndex == index;
     return GestureDetector(
-      onTap: () => setState(() => _currentIndex = index),
+      behavior: HitTestBehavior.opaque,
+      onTap: () => ref.read(patientTabProvider.notifier).state = index,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.all(14), // Espaciado premium para el botón de marca central
             decoration: BoxDecoration(
-              color: isSelected ? AppColors.primary : Colors.transparent,
-              shape: BoxShape.circle,
+                color: AppColors.primary,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  if (isSelected)
+                    BoxShadow(color: AppColors.primary.withValues(alpha: 0.4), blurRadius: 10, offset: const Offset(0, 4))
+                ]
             ),
             child: Icon(
                 icon,
-                color: isSelected ? Colors.white : AppColors.textSecondary,
-                size: 28
+                color: Colors.white,
+                size: 26
             ),
           ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10,
-              color: isSelected ? AppColors.primary : AppColors.textSecondary,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            ),
-          )
+          const SizedBox(height: 18),
         ],
       ),
     );

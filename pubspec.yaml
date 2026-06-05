@@ -18,8 +18,24 @@ dependencies:
 
   # HealSkin Core Tech Stack
   supabase_flutter: ^2.5.4 # Para la BD y Auth en tiempo real
+  shared_preferences: ^2.3.2 # Para la persistencia de perfiles y caché
   flutter_riverpod: ^2.5.1 # Para el manejo de estado
   google_fonts: ^6.2.1     # Para la tipografía
+  flutter_dotenv: ^6.0.1
+  image_picker: ^1.2.1
+  lottie: ^3.3.3
+  flutter_map: ^6.1.0
+  latlong2: ^0.9.1
+  geolocator: ^11.1.0
+
+  google_generative_ai: ^0.4.0  # El SDK oficial de Gemini
+  uuid: ^4.3.3
+
+  agora_rtc_engine: ^6.2.1
+  permission_handler: ^11.0.1
+  url_launcher: ^6.3.2
+  pdf: ^3.10.8
+  printing: ^5.11.1
 
 dev_dependencies:
   flutter_test:
@@ -28,5 +44,8 @@ dev_dependencies:
   flutter_lints: ^6.0.0
 
 flutter:
-
   uses-material-design: true
+
+  assets:
+  - .env
+  # - assets/images/ (aquí asumo que tienes tus imágenes)

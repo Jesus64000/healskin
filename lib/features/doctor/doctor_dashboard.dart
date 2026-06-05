@@ -1,72 +1,321 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
 import '../auth/auth_provider.dart';
+import '../auth/login_screen.dart';
 
-class DoctorDashboard extends ConsumerWidget {
+// IMPORTACIONES DE LAS 3 PESTAÑAS (Asegúrate de tener estos archivos o crearlos luego)
+import 'doctor_patients_view.dart';
+import 'doctor_agenda_view.dart';
+import 'doctor_profile_view.dart';
+import 'patient_clinical_detail_screen.dart';
+
+// ============================================================================
+// 🚀 CAPA DE DATOS (PROVIDERS)
+// ============================================================================
+
+final urgentAlertsProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  final supabase = Supabase.instance.client;
+  final doctorId = supabase.auth.currentUser?.id;
+
+  if (doctorId == null) return [];
+
+  // 🔒 PRIVACIDAD: Obtener solo pacientes asociados a este doctor
+  final appointmentsResponse = await supabase
+      .from('appointments')
+      .select('patient_id')
+      .eq('doctor_id', doctorId);
+
+  final List<dynamic> appts = appointmentsResponse as List<dynamic>;
+  final List<String> patientIds = appts
+      .map((item) => (item['patient_id'] ?? '').toString())
+      .where((id) => id.isNotEmpty)
+      .toSet()
+      .toList();
+
+  if (patientIds.isEmpty) return [];
+
+  // Traer alertas urgentes únicamente para MIS pacientes
+  final response = await supabase
+      .from('ai_scans')
+      .select('*, profiles(full_name)')
+      .inFilter('patient_id', patientIds)
+      .inFilter('risk_level', ['high', 'urgent'])
+      .order('created_at', ascending: false)
+      .limit(5);
+
+  return List<Map<String, dynamic>>.from(response);
+});
+
+// 🚀 REFACTOR: Conectado a la columna 'status' correcta y filtrado por doctor
+final doctorKpiProvider = FutureProvider.autoDispose<Map<String, int>>((ref) async {
+  final supabase = Supabase.instance.client;
+  final doctorId = supabase.auth.currentUser?.id;
+
+  if (doctorId == null) return {'totalPatients': 0, 'consultationsToday': 0};
+
+  // 🔒 PRIVACIDAD: Pacientes únicos con citas agendadas con este doctor
+  final appointmentsResponse = await supabase
+      .from('appointments')
+      .select('patient_id')
+      .eq('doctor_id', doctorId);
+
+  final List<dynamic> appts = appointmentsResponse as List<dynamic>;
+  final uniquePatientIds = appts
+      .map((item) => (item['patient_id'] ?? '').toString())
+      .where((id) => id.isNotEmpty)
+      .toSet();
+
+  // Citas activas programadas
+  final appointmentsRes = await supabase
+      .from('appointments')
+      .select('id')
+      .eq('doctor_id', doctorId)
+      .eq('status', 'scheduled');
+
+  return {
+    'totalPatients': uniquePatientIds.length,
+    'consultationsToday': appointmentsRes.length,
+  };
+});
+
+// 🚀 REFACTOR: Conectado a 'appointment_date' y filtrado estrictamente para citas FUTURAS
+final todayAgendaPreviewProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  final supabase = Supabase.instance.client;
+  final doctorId = supabase.auth.currentUser?.id;
+
+  if (doctorId == null) return [];
+
+  final String nowIso = DateTime.now().toUtc().toIso8601String();
+
+  final response = await supabase
+      .from('appointments')
+      .select('*, patient:profiles!patient_id(full_name)')
+      .eq('doctor_id', doctorId)
+      .eq('status', 'scheduled')
+      .gte('appointment_date', nowIso) // Solo citas futuras o a partir de hoy!
+      .order('appointment_date', ascending: true)
+      .limit(3);
+
+  return List<Map<String, dynamic>>.from(response);
+});
+
+// ============================================================================
+// 📱 CAPA DE PRESENTACIÓN (UI)
+// ============================================================================
+
+class DoctorDashboard extends StatefulWidget {
   const DoctorDashboard({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  State<DoctorDashboard> createState() => _DoctorDashboardState();
+}
+
+class _DoctorDashboardState extends State<DoctorDashboard> {
+  int _currentIndex = 0;
+
+  final List<Widget> _screens = [
+    const _DoctorHomeTab(),
+    const DoctorPatientsView(),
+    const DoctorAgendaView(),
+    const DoctorProfileView(),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.backgroundLight,
-      body: CustomScrollView(
+      body: IndexedStack(
+        index: _currentIndex,
+        children: _screens,
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        backgroundColor: Colors.white,
+        selectedItemColor: AppColors.primary,
+        unselectedItemColor: AppColors.textSecondary,
+        type: BottomNavigationBarType.fixed,
+        elevation: 20,
+        currentIndex: _currentIndex,
+        onTap: (index) => setState(() => _currentIndex = index),
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.grid_view_rounded), label: "Panel"),
+          BottomNavigationBarItem(icon: Icon(Icons.people_alt_outlined), label: "Pacientes"),
+          BottomNavigationBarItem(icon: Icon(Icons.calendar_today_rounded), label: "Agenda"),
+          BottomNavigationBarItem(icon: Icon(Icons.settings_outlined), label: "Ajustes"),
+        ],
+      ),
+    );
+  }
+}
+
+class _DoctorHomeTab extends ConsumerWidget {
+  const _DoctorHomeTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final kpiAsync = ref.watch(doctorKpiProvider);
+    final alertsAsync = ref.watch(urgentAlertsProvider);
+    final agendaAsync = ref.watch(todayAgendaPreviewProvider);
+
+    return RefreshIndicator(
+      color: AppColors.primary,
+      onRefresh: () async {
+        ref.invalidate(doctorKpiProvider);
+        ref.invalidate(urgentAlertsProvider);
+        ref.invalidate(todayAgendaPreviewProvider);
+      },
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
-          _buildAppBar(context, ref),
+          SliverAppBar(
+            expandedHeight: 80,
+            floating: true,
+            backgroundColor: AppColors.backgroundLight,
+            elevation: 0,
+            flexibleSpace: FlexibleSpaceBar(
+              titlePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+              title: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text("Panel Médico",
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                  IconButton(
+                    onPressed: () {
+                      ref.read(authProvider.notifier).logout();
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(builder: (_) => const LoginScreen()),
+                            (route) => false,
+                      );
+                    },
+                    icon: const Icon(Icons.power_settings_new, color: AppColors.danger, size: 24),
+                  ),
+                ],
+              ),
+            ),
+          ),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.all(20.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildKPIs(),
+                  kpiAsync.when(
+                    data: (kpis) => _buildKPIs(
+                      patientsCount: kpis['totalPatients'].toString(),
+                      consultationsCount: kpis['consultationsToday'].toString(),
+                    ),
+                    loading: () => const Center(child: CircularProgressIndicator(color: AppColors.primary)),
+                    error: (err, stack) => const Text("Error al cargar KPIs", style: TextStyle(color: AppColors.danger)),
+                  ),
+
                   const SizedBox(height: 30),
                   _buildSectionTitle("Alertas Prioritarias IA", isUrgent: true),
-                  const SizedBox(height: 15),
-                  _buildCriticalAlerts(),
+                                    alertsAsync.when(
+                    data: (alerts) {
+                      if (alerts.isEmpty) {
+                        return _buildEmptyState("Todo en orden", "No hay alertas urgentes de la IA en este momento.", Icons.check_circle_outline);
+                      }
+                      return Column(
+                        children: alerts.map((alert) {
+                          final patientName = alert['profiles']?['full_name'] ?? 'Paciente Desconocido';
+                          final patientId = alert['patient_id'];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12.0),
+                            child: _alertCard(
+                              patientName: patientName,
+                              aiDiagnosis: alert['ai_diagnosis'] ?? 'Análisis Pendiente',
+                              action: alert['recommendation'] ?? 'Requiere revisión',
+                              onTap: () {
+                                if (patientId != null) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => PatientClinicalDetailScreen(
+                                        patientId: patientId,
+                                        appointmentId: null, // Revisión libre de IA
+                                      ),
+                                    ),
+                                  );
+                                }
+                              },
+                            ),
+                          );
+                        }).toList(),
+                      );
+                    },
+                    loading: () => const Center(child: CircularProgressIndicator(color: AppColors.danger)),
+                    error: (err, stack) => const Text("Error al cargar alertas", style: TextStyle(color: AppColors.danger)),
+                  ),
+
                   const SizedBox(height: 30),
-                  _buildSectionTitle("Agenda de Hoy", isUrgent: false),
+                  _buildSectionTitle("Próximas Citas", isUrgent: false),
                   const SizedBox(height: 15),
-                  _buildDailyAgenda(),
+
+                  agendaAsync.when(
+                    data: (appointments) {
+                      if (appointments.isEmpty) {
+                        return _buildEmptyState("Agenda libre", "No tienes citas programadas próximamente.", Icons.coffee);
+                      }
+                      return Column(
+                        children: appointments.map((appt) {
+                          final patientName = appt['patient']?['full_name'] ?? 'Desconocido';
+                          final reason = appt['reason'] ?? 'Consulta general';
+                          final isVideo = appt['type'] == 'telemedicine';
+                          final patientId = appt['patient_id'];
+                          final appointmentId = appt['id'];
+
+                          final date = DateTime.parse(appt['appointment_date']).toLocal();
+                          final timeString = DateFormat('hh:mm a').format(date);
+
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12.0),
+                            child: _agendaItem(
+                              timeString,
+                              patientName,
+                              reason,
+                              isVideo,
+                              onTap: () {
+                                if (patientId != null && appointmentId != null) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => PatientClinicalDetailScreen(
+                                        patientId: patientId,
+                                        appointmentId: appointmentId,
+                                      ),
+                                    ),
+                                  );
+                                }
+                              },
+                            ),
+                          );
+                        }).toList(),
+                      );
+                    },
+                    loading: () => const Center(child: CircularProgressIndicator(color: AppColors.primary)),
+                    error: (err, stack) => const Text("Error al cargar agenda", style: TextStyle(color: AppColors.danger)),
+                  ),
+
+                  const SizedBox(height: 40),
                 ],
               ),
             ),
           ),
         ],
       ),
-      bottomNavigationBar: _buildBottomNav(),
     );
   }
 
-  Widget _buildAppBar(BuildContext context, WidgetRef ref) {
-    return SliverAppBar(
-      expandedHeight: 80,
-      floating: true,
-      backgroundColor: AppColors.backgroundLight,
-      elevation: 0,
-      flexibleSpace: FlexibleSpaceBar(
-        titlePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text("Panel Médico",
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
-            IconButton(
-              onPressed: () => ref.read(authProvider.notifier).logout(),
-              icon: const Icon(Icons.power_settings_new, color: AppColors.danger, size: 24),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  // --- COMPONENTES ---
 
-  Widget _buildKPIs() {
+  Widget _buildKPIs({required String patientsCount, required String consultationsCount}) {
     return Row(
       children: [
-        _kpiCard("Pacientes", "142", Icons.people_outline, AppColors.secondary),
+        _kpiCard("Pacientes", patientsCount, Icons.people_outline, AppColors.secondary),
         const SizedBox(width: 15),
-        _kpiCard("Consultas Hoy", "8", Icons.videocam_outlined, AppColors.primary),
+        _kpiCard("Consultas", consultationsCount, Icons.videocam_outlined, AppColors.primary),
       ],
     );
   }
@@ -79,9 +328,7 @@ class DoctorDashboard extends ConsumerWidget {
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10, offset: const Offset(0, 4))
-          ],
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10, offset: const Offset(0, 4))],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -116,90 +363,101 @@ class DoctorDashboard extends ConsumerWidget {
     );
   }
 
-  Widget _buildCriticalAlerts() {
-    return _alertCard("Mariana Sandrea", "Sospecha de Lesión Premaligna (87%)", "Revisión Inmediata");
-  }
-
-  Widget _alertCard(String patientName, String aiDiagnosis, String action) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.danger.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.danger.withValues(alpha: 0.2)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.warning_amber_rounded, color: AppColors.danger, size: 30),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(patientName, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16)),
-                Text(aiDiagnosis, style: const TextStyle(color: AppColors.danger, fontSize: 12, fontWeight: FontWeight.w600)),
-              ],
-            ),
+  Widget _alertCard({required String patientName, required String aiDiagnosis, required String action, required VoidCallback onTap}) {
+    return Card(
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.danger.withValues(alpha: 0.05),
+            border: Border.all(color: AppColors.danger.withValues(alpha: 0.2)),
+            borderRadius: BorderRadius.circular(16),
           ),
-          const Icon(Icons.arrow_forward_ios, color: AppColors.danger, size: 14)
-        ],
+          child: Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: AppColors.danger, size: 30),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(patientName, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16)),
+                    const SizedBox(height: 4),
+                    Text(aiDiagnosis, style: const TextStyle(color: AppColors.danger, fontSize: 12, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 4),
+                    Text(action, style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_ios, color: AppColors.danger, size: 14)
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildDailyAgenda() {
-    return Column(
-      children: [
-        _agendaItem("10:30 AM", "Carlos Pérez", "Control de Acné cosmético"),
-        const SizedBox(height: 12),
-        _agendaItem("02:00 PM", "Lucía Gómez", "Revisión Dermatitis Atópica"),
-      ],
-    );
-  }
-
-  Widget _agendaItem(String time, String patient, String reason) {
+  Widget _buildEmptyState(String title, String message, IconData icon) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.surfaceLight,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
       ),
-      child: Row(
+      child: Column(
         children: [
-          Text(time, style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 14)),
-          const SizedBox(width: 16),
-          Container(width: 1, height: 40, color: Colors.black.withValues(alpha: 0.05)),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(patient, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold)),
-                Text(reason, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-              ],
-            ),
-          ),
-          const Icon(Icons.videocam_outlined, color: AppColors.secondary),
+          Icon(icon, color: AppColors.success, size: 40),
+          const SizedBox(height: 10),
+          Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+          const SizedBox(height: 5),
+          Text(message, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
         ],
       ),
     );
   }
 
-  Widget _buildBottomNav() {
-    return BottomNavigationBar(
-      backgroundColor: Colors.white,
-      selectedItemColor: AppColors.primary,
-      unselectedItemColor: AppColors.textSecondary,
-      type: BottomNavigationBarType.fixed,
-      elevation: 20,
-      currentIndex: 0,
-      items: const [
-        BottomNavigationBarItem(icon: Icon(Icons.grid_view_rounded), label: "Panel"),
-        BottomNavigationBarItem(icon: Icon(Icons.people_alt_outlined), label: "Pacientes"),
-        BottomNavigationBarItem(icon: Icon(Icons.calendar_today_rounded), label: "Agenda"),
-        BottomNavigationBarItem(icon: Icon(Icons.settings_outlined), label: "Ajustes"),
-      ],
+  Widget _agendaItem(String time, String patient, String reason, bool isVideo, {required VoidCallback onTap}) {
+    return Card(
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Row(
+            children: [
+              Text(time, style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 14)),
+              const SizedBox(width: 16),
+              Container(width: 1, height: 40, color: Colors.black.withValues(alpha: 0.05)),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(patient, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold)),
+                    Text(reason, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                  ],
+                ),
+              ),
+              Icon(isVideo ? Icons.videocam_outlined : Icons.business, color: isVideo ? AppColors.secondary : AppColors.primary),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

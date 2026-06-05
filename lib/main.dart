@@ -2,19 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'core/theme/app_colors.dart';
-import 'features/auth/auth_provider.dart';
-import 'features/auth/splash_screen.dart';
-import 'features/auth/login_screen.dart';
-import 'features/doctor/doctor_dashboard.dart';
-import 'features/patient/patient_dashboard.dart';
+import 'features/auth/splash_screen.dart'; // Importante tenerlo aquí
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 1. Carga de variables de entorno
+  await dotenv.load(fileName: ".env");
+
+  // 2. Inicialización de Supabase
   await Supabase.initialize(
-    url: 'https://uceithusnfqmcbxoptcu.supabase.co', // TODO: Pega aquí tu URL
-    anonKey: 'sb_publishable_mvlT5LVYzKjmbyavFFmYYw_tTD0KF4e', // TODO: Pega aquí tu clave anónima
+    url: dotenv.env['SUPABASE_URL']!,
+    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
+
   runApp(const ProviderScope(child: HealSkinApp()));
 }
 
@@ -26,40 +29,25 @@ class HealSkinApp extends ConsumerWidget {
     return MaterialApp(
       title: 'HealSkin',
       debugShowCheckedModeBanner: false,
-      // CAMBIO ESTÉTICO: Forzamos el modo claro
       themeMode: ThemeMode.light,
       theme: ThemeData(
         scaffoldBackgroundColor: AppColors.backgroundLight,
-        // Textos oscuros por defecto para el modo claro
-        textTheme: GoogleFonts.poppinsTextTheme(ThemeData.light().textTheme).apply(
+        // Configuración global de fuentes
+        textTheme: GoogleFonts.poppinsTextTheme(Theme.of(context).textTheme).apply(
           bodyColor: AppColors.textPrimary,
           displayColor: AppColors.textPrimary,
         ),
-        colorScheme: const ColorScheme.light(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: AppColors.primary,
           primary: AppColors.primary,
           secondary: AppColors.secondary,
+          surface: Colors.white,
         ),
+        useMaterial3: true, // Habilitamos Material 3 para un look más moderno
       ),
-      home: const AuthGatekeeper(),
+      // 3. CAMBIO CLAVE: El punto de entrada ahora es el Splash
+      // Él decidirá si va a Login, Onboarding o Dashboard
+      home: const SplashScreen(),
     );
-  }
-}
-
-class AuthGatekeeper extends ConsumerWidget {
-  const AuthGatekeeper({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final authState = ref.watch(authProvider);
-
-    if (!authState.isInitialized) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator(color: AppColors.primary)));
-    }
-    if (authState.session == null) {
-      return const LoginScreen();
-    }
-    return authState.role == UserRole.doctor
-        ? const DoctorDashboard()
-        : const PatientDashboard();
   }
 }
