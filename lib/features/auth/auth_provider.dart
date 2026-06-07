@@ -172,6 +172,7 @@ class AuthNotifier extends StateNotifier<HealSkinAuthState> {
           'full_name': fullName,
           'role': role,
           'is_approved': role == 'doctor' ? false : true, // Los doctores entran bloqueados
+          'email': email.trim(),
         });
       }
 
@@ -266,6 +267,7 @@ class AuthNotifier extends StateNotifier<HealSkinAuthState> {
             'full_name': fullName,
             'role': 'patient',
             'is_approved': true,
+            'email': session.user.email,
           });
         } else {
           role = _parseRole(profile['role'] ?? 'patient');
@@ -364,6 +366,7 @@ class AuthNotifier extends StateNotifier<HealSkinAuthState> {
         'full_name': fullName,
         'role': roleString,
         'is_approved': roleString == 'doctor' ? false : true,
+        'email': user.email,
       });
     } catch (_) {
       // Ignorar fallos de red/desconexión

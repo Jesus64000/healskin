@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_colors.dart';
 import 'patient_appointments_provider.dart';
+import '../../../core/services/notification_service.dart';
 
 class PatientRemindersView extends ConsumerStatefulWidget {
   const PatientRemindersView({super.key});
@@ -69,8 +70,28 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
             {'id': 'c2', 'title': 'Re-aplicar Protector Solar', 'time': '12:00 PM', 'note': 'Retocar cada 4 horas', 'active': true},
           ];
         }
+
+        // --- 📅 REINICIO DIARIO DE RUTINAS ---
+        final String todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+        final String? lastDate = prefs.getString('healskin_routine_last_date');
+        
+        if (lastDate != todayStr) {
+          for (var item in _morningRoutine) {
+            item['done'] = false;
+          }
+          for (var item in _nightRoutine) {
+            item['done'] = false;
+          }
+          prefs.setString('healskin_morning_routine', json.encode(_morningRoutine));
+          prefs.setString('healskin_night_routine', json.encode(_nightRoutine));
+          prefs.setString('healskin_routine_last_date', todayStr);
+        }
+
         _isLoadingPrefs = false;
       });
+
+      // 🔔 Sincronizar alarmas y recordatorios en segundo plano
+      await _syncAllNotifications();
     } catch (e) {
       debugPrint("Error loading SharedPreferences: $e");
       setState(() {
@@ -101,6 +122,42 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
       await prefs.setString('healskin_custom_reminders', json.encode(_customReminders));
     } catch (e) {
       debugPrint("Error saving SharedPreferences: $e");
+    }
+  }
+
+  Future<void> _syncAllNotifications() async {
+    final notificationService = NotificationService();
+    
+    // ☀️ Programar recordatorio de rutina de mañana a las 8:00 AM
+    await notificationService.scheduleDailyRoutineReminder(
+      id: 1001,
+      title: "☀️ Rutina de la Mañana",
+      body: "Es hora de iniciar tu día cuidando tu piel. ¡Completa tu rutina de mañana!",
+      hour: 8,
+      minute: 0,
+    );
+
+    // 🌙 Programar recordatorio de rutina de noche a las 8:00 PM
+    await notificationService.scheduleDailyRoutineReminder(
+      id: 1002,
+      title: "🌙 Rutina de la Noche",
+      body: "Termina el día consintiendo tu piel. ¡Completa tu rutina nocturna!",
+      hour: 20,
+      minute: 0,
+    );
+
+    // ⏰ Programar alarmas personalizadas activas
+    for (final alarm in _customReminders) {
+      if (alarm['active'] == true) {
+        await notificationService.scheduleMedicationAlarm(
+          alarmId: alarm['id'] as String,
+          title: alarm['title'] as String,
+          note: (alarm['note'] ?? 'Recordatorio programado') as String,
+          timeStr: alarm['time'] as String,
+        );
+      } else {
+        await notificationService.cancelNotification(alarm['id'] as String);
+      }
     }
   }
 
@@ -208,16 +265,25 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
                             return;
                           }
 
+                          final Map<String, dynamic> newAlarm = {
+                            'id': DateTime.now().millisecondsSinceEpoch.toString(),
+                            'title': titleController.text.trim(),
+                            'time': selectedTime.format(context),
+                            'note': noteController.text.trim().isEmpty ? 'Recordatorio programado' : noteController.text.trim(),
+                            'active': true,
+                          };
+
                           setState(() {
-                            _customReminders.add({
-                              'id': DateTime.now().millisecondsSinceEpoch.toString(),
-                              'title': titleController.text.trim(),
-                              'time': selectedTime.format(context),
-                              'note': noteController.text.trim().isEmpty ? 'Recordatorio programado' : noteController.text.trim(),
-                              'active': true,
-                            });
+                            _customReminders.add(newAlarm);
                           });
                           _savePreferences(); // 🚀 Guarda en SharedPreferences
+
+                          NotificationService().scheduleMedicationAlarm(
+                            alarmId: newAlarm['id'] as String,
+                            title: newAlarm['title'] as String,
+                            note: newAlarm['note'] as String,
+                            timeStr: newAlarm['time'] as String,
+                          );
 
                           Navigator.pop(context);
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -743,11 +809,21 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
               Switch.adaptive(
                 activeColor: AppColors.primary,
                 value: active,
-                onChanged: (val) {
+                onChanged: (val) async {
                   setState(() {
                     alarm['active'] = val;
                   });
                   _savePreferences(); // 🚀 Persiste el cambio de estado
+                  if (val) {
+                    await NotificationService().scheduleMedicationAlarm(
+                      alarmId: alarm['id'] as String,
+                      title: alarm['title'] as String,
+                      note: (alarm['note'] ?? 'Recordatorio programado') as String,
+                      timeStr: alarm['time'] as String,
+                    );
+                  } else {
+                    await NotificationService().cancelNotification(alarm['id'] as String);
+                  }
                 },
               )
             ],

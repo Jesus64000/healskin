@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_colors.dart';
 import 'auth_provider.dart';
+import 'login_screen.dart';
 
 class ResetPasswordScreen extends ConsumerStatefulWidget {
   const ResetPasswordScreen({super.key});
@@ -42,7 +43,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
         showDialog(
           context: context,
           barrierDismissible: false,
-          builder: (context) => AlertDialog(
+          builder: (dialogContext) => AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
             backgroundColor: AppColors.backgroundLight,
             title: const Text(
@@ -68,8 +69,11 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
               ElevatedButton(
                 onPressed: () {
                   ref.read(authProvider.notifier).logout();
-                  Navigator.of(context).pop(); // Cierra el diálogo
-                  Navigator.of(context).pop(); // Vuelve al Login
+                  Navigator.of(dialogContext).pop(); // Cierra el diálogo
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                    (route) => false,
+                  );
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,

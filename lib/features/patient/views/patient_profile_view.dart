@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:image_cropper/image_cropper.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../auth/auth_provider.dart';
 import '../../auth/profile_provider.dart';
@@ -29,10 +30,33 @@ class _PatientProfileViewState extends ConsumerState<PatientProfileView> {
     
     if (pickedFile == null) return;
     
+    // Recortar la foto para permitir que el usuario la encuadre
+    final croppedFile = await ImageCropper().cropImage(
+      sourcePath: pickedFile.path,
+      aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+      uiSettings: [
+        AndroidUiSettings(
+          toolbarTitle: 'Ajustar Foto de Perfil',
+          toolbarColor: AppColors.primary,
+          toolbarWidgetColor: Colors.white,
+          initAspectRatio: CropAspectRatioPreset.square,
+          lockAspectRatio: true,
+          cropStyle: CropStyle.circle,
+        ),
+        IOSUiSettings(
+          title: 'Ajustar Foto de Perfil',
+          aspectRatioLockEnabled: true,
+          cropStyle: CropStyle.circle,
+        ),
+      ],
+    );
+
+    if (croppedFile == null) return;
+
     setState(() => _isUploadingAvatar = true);
     
     try {
-      final file = File(pickedFile.path);
+      final file = File(croppedFile.path);
       final supabase = Supabase.instance.client;
       final userId = supabase.auth.currentUser!.id;
       
@@ -72,8 +96,14 @@ class _PatientProfileViewState extends ConsumerState<PatientProfileView> {
     }
   }
 
-  // --- ✍️ ACTUALIZAR NOMBRE COMPLETO ---
-  Future<void> _updateName(String newName) async {
+  // --- ✍️ ACTUALIZAR PERFIL ---
+  Future<void> _updateProfile({
+    required String newName,
+    required int? age,
+    required String? gender,
+    required String allergies,
+    required String medicalHistory,
+  }) async {
     if (newName.trim().isEmpty) return;
     
     setState(() => _isSavingName = true);
@@ -84,6 +114,10 @@ class _PatientProfileViewState extends ConsumerState<PatientProfileView> {
       
       await supabase.from('profiles').update({
         'full_name': newName.trim(),
+        'age': age,
+        'gender': gender,
+        'allergies': allergies.trim(),
+        'medical_history': medicalHistory.trim(),
       }).eq('id', userId);
       
       ref.invalidate(userProfileProvider);
@@ -91,7 +125,7 @@ class _PatientProfileViewState extends ConsumerState<PatientProfileView> {
       if (mounted) {
         Navigator.pop(context); // Cerramos el Modal
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text("¡Nombre de perfil actualizado! 📝", style: TextStyle(fontWeight: FontWeight.bold)),
+          content: Text("¡Información de perfil actualizada! 📝", style: TextStyle(fontWeight: FontWeight.bold)),
           backgroundColor: AppColors.success,
           behavior: SnackBarBehavior.floating,
         ));
@@ -99,7 +133,7 @@ class _PatientProfileViewState extends ConsumerState<PatientProfileView> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text("Error al actualizar nombre: $e"),
+          content: Text("Error al actualizar información: $e"),
           backgroundColor: AppColors.danger,
           behavior: SnackBarBehavior.floating,
         ));
@@ -109,10 +143,20 @@ class _PatientProfileViewState extends ConsumerState<PatientProfileView> {
     }
   }
 
-  // --- 📝 MODAL BOTTOM SHEET DE EDICIÓN DE NOMBRE ---
-  void _showEditProfileModal(String currentName) {
-    final textController = TextEditingController(text: currentName);
-    
+  // --- 📝 MODAL BOTTOM SHEET DE EDICIÓN DE PERFIL ---
+  void _showEditProfileModal(Map<String, dynamic>? profile) {
+    final nameController = TextEditingController(text: profile?['full_name'] ?? '');
+    final ageController = TextEditingController(text: profile?['age']?.toString() ?? '');
+    String? selectedGender = profile?['gender'];
+    final allergiesController = TextEditingController(text: profile?['allergies'] ?? '');
+    final medicalHistoryController = TextEditingController(text: profile?['medical_history'] ?? '');
+
+    // Géneros válidos
+    final genders = ["Femenino", "Masculino", "Otro", "Prefiero no decirlo"];
+    if (selectedGender != null && !genders.contains(selectedGender)) {
+      selectedGender = null;
+    }
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -125,76 +169,199 @@ class _PatientProfileViewState extends ConsumerState<PatientProfileView> {
                 bottom: MediaQuery.of(context).viewInsets.bottom,
               ),
               child: Container(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.75, // máximo 75% del alto de pantalla
+                ),
                 decoration: const BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 45,
-                        height: 5,
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade300,
-                          borderRadius: BorderRadius.circular(10),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 45,
+                          height: 5,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade300,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      "Editar Información",
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                    ),
-                    const SizedBox(height: 5),
-                    const Text(
-                      "Actualiza tu nombre completo de presentación.",
-                      style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                    ),
-                    const SizedBox(height: 20),
-                    TextFormField(
-                      controller: textController,
-                      style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary),
-                      decoration: InputDecoration(
-                        labelText: "Nombre Completo",
-                        prefixIcon: const Icon(Icons.person_rounded, color: AppColors.primary),
-                        fillColor: AppColors.surfaceLight,
-                        filled: true,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.grey.shade300)),
-                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
+                      const SizedBox(height: 20),
+                      const Text(
+                        "Editar Información",
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
                       ),
-                    ),
-                    const SizedBox(height: 25),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: ElevatedButton(
-                        onPressed: _isSavingName 
-                            ? null 
-                            : () async {
-                                setModalState(() => _isSavingName = true);
-                                await _updateName(textController.text);
-                                setModalState(() => _isSavingName = false);
-                              },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          elevation: 0,
+                      const SizedBox(height: 5),
+                      const Text(
+                        "Actualiza tus datos demográficos e historial médico para tu dermatólogo.",
+                        style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                      ),
+                      const SizedBox(height: 20),
+                      
+                      // 1. Nombre Completo
+                      const Text("Nombre Completo *", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textSecondary)),
+                      const SizedBox(height: 5),
+                      TextFormField(
+                        controller: nameController,
+                        style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                        decoration: InputDecoration(
+                          hintText: "Ej. María Pérez",
+                          prefixIcon: const Icon(Icons.person_rounded, color: AppColors.primary),
+                          fillColor: AppColors.surfaceLight,
+                          filled: true,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
                         ),
-                        child: _isSavingName
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                              )
-                            : const Text("Guardar Cambios", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
                       ),
-                    ),
-                    const SizedBox(height: 15),
-                  ],
+                      const SizedBox(height: 15),
+
+                      // Fila de Edad y Género
+                      Row(
+                        children: [
+                          // 2. Edad
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text("Edad", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textSecondary)),
+                                const SizedBox(height: 5),
+                                TextFormField(
+                                  controller: ageController,
+                                  keyboardType: TextInputType.number,
+                                  style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                                  decoration: InputDecoration(
+                                    hintText: "Ej. 25",
+                                    prefixIcon: const Icon(Icons.cake_outlined, color: AppColors.primary),
+                                    fillColor: AppColors.surfaceLight,
+                                    filled: true,
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 15),
+                          // 3. Género
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text("Género", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textSecondary)),
+                                const SizedBox(height: 5),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.surfaceLight,
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<String>(
+                                      value: selectedGender,
+                                      hint: const Text("Selecciona", style: TextStyle(fontSize: 14, color: AppColors.textSecondary)),
+                                      isExpanded: true,
+                                      style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                                      icon: const Icon(Icons.arrow_drop_down, color: AppColors.primary),
+                                      items: genders.map((g) {
+                                        return DropdownMenuItem(value: g, child: Text(g, style: const TextStyle(fontSize: 14)));
+                                      }).toList(),
+                                      onChanged: (val) {
+                                        setModalState(() => selectedGender = val);
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 15),
+
+                      // 4. Alergias Conocidas
+                      const Text("Alergias Conocidas", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textSecondary)),
+                      const SizedBox(height: 5),
+                      TextFormField(
+                        controller: allergiesController,
+                        maxLines: 2,
+                        style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                        decoration: InputDecoration(
+                          hintText: "Ej. Alergia al níquel, fragancias artificiales...",
+                          prefixIcon: const Icon(Icons.warning_amber_rounded, color: AppColors.primary),
+                          fillColor: AppColors.surfaceLight,
+                          filled: true,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                        ),
+                      ),
+                      const SizedBox(height: 15),
+
+                      // 5. Antecedentes Médicos y Tratamientos
+                      const Text("Antecedentes y Tratamientos", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textSecondary)),
+                      const SizedBox(height: 5),
+                      TextFormField(
+                        controller: medicalHistoryController,
+                        maxLines: 3,
+                        style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                        decoration: InputDecoration(
+                          hintText: "Ej. Tratamiento previo con ácido salicílico. Antecedentes familiares de rosácea...",
+                          prefixIcon: const Icon(Icons.history_edu_outlined, color: AppColors.primary),
+                          fillColor: AppColors.surfaceLight,
+                          filled: true,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                        ),
+                      ),
+                      const SizedBox(height: 25),
+
+                      // Botón Guardar
+                      SizedBox(
+                        width: double.infinity,
+                        height: 52,
+                        child: ElevatedButton(
+                          onPressed: _isSavingName 
+                              ? null 
+                              : () async {
+                                  if (nameController.text.trim().isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                      content: Text("El nombre es obligatorio."),
+                                      backgroundColor: AppColors.warning,
+                                    ));
+                                    return;
+                                  }
+
+                                  setModalState(() => _isSavingName = true);
+                                  
+                                  final int? age = int.tryParse(ageController.text);
+                                  await _updateProfile(
+                                    newName: nameController.text,
+                                    age: age,
+                                    gender: selectedGender,
+                                    allergies: allergiesController.text,
+                                    medicalHistory: medicalHistoryController.text,
+                                  );
+                                  
+                                  setModalState(() => _isSavingName = false);
+                                },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            elevation: 0,
+                          ),
+                          child: _isSavingName
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                )
+                              : const Text("Guardar Cambios", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                        ),
+                      ),
+                      const SizedBox(height: 15),
+                    ],
+                  ),
                 ),
               ),
             );
@@ -434,7 +601,7 @@ class _PatientProfileViewState extends ConsumerState<PatientProfileView> {
 
                         // Botón de Edición Rápida
                         OutlinedButton.icon(
-                          onPressed: () => _showEditProfileModal(name),
+                          onPressed: () => _showEditProfileModal(profile),
                           icon: const Icon(Icons.badge_rounded, size: 16),
                           label: const Text("Editar Datos", style: TextStyle(fontWeight: FontWeight.bold)),
                           style: OutlinedButton.styleFrom(
@@ -496,7 +663,7 @@ class _PatientProfileViewState extends ConsumerState<PatientProfileView> {
 
                         const SizedBox(height: 25),
                         const Text(
-                          "HealSkin v1.1.0 • Ecosistema Clínico",
+                          "HealSkin v1.1.0 • Aplicación Dermatológica",
                           style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.bold)
                         ),
                         const SizedBox(height: 20),

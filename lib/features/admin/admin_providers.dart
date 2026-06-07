@@ -39,6 +39,17 @@ final recentScansProvider = FutureProvider.autoDispose<List<Map<String, dynamic>
   return response;
 });
 
+// 3.5. LISTA DE USUARIOS POR ROL (ADMIN)
+final adminUserListProvider = FutureProvider.autoDispose.family<List<Map<String, dynamic>>, String>((ref, role) async {
+  final supabase = Supabase.instance.client;
+  final response = await supabase
+      .from('profiles')
+      .select()
+      .eq('role', role)
+      .order('full_name', ascending: true);
+  return List<Map<String, dynamic>>.from(response);
+});
+
 // 4. CONTROLADOR GENERAL DE ADMIN
 final adminControllerProvider = Provider((ref) => AdminController(ref));
 

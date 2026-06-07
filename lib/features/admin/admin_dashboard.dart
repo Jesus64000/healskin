@@ -9,6 +9,7 @@ import 'admin_article_management_view.dart';
 import 'admin_clinic_management_view.dart';
 import 'quizzes_admin_screen.dart';
 import 'admin_doctor_approval_screen.dart';
+import 'admin_users_view.dart';
 
 class AdminDashboard extends ConsumerWidget {
   const AdminDashboard({super.key});
@@ -45,7 +46,7 @@ class AdminDashboard extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 15),
-                    _buildMetricsSection(ref),
+                    _buildMetricsSection(context, ref),
                     const SizedBox(height: 30),
 
                     // 🛠️ Hub de Gestión (Grid 2x2)
@@ -128,7 +129,7 @@ class AdminDashboard extends ConsumerWidget {
     );
   }
 
-  Widget _buildMetricsSection(WidgetRef ref) {
+  Widget _buildMetricsSection(BuildContext context, WidgetRef ref) {
     final metricsAsync = ref.watch(adminMetricsProvider);
 
     return metricsAsync.when(
@@ -140,6 +141,12 @@ class AdminDashboard extends ConsumerWidget {
               metrics['patients'].toString(),
               Icons.people_outline_rounded,
               AppColors.primary,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const AdminUserListScreen(role: 'patient'),
+                ),
+              ),
             ),
           ),
           const SizedBox(width: 15),
@@ -149,6 +156,12 @@ class AdminDashboard extends ConsumerWidget {
               metrics['doctors'].toString(),
               Icons.medical_services_outlined,
               AppColors.secondary,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const AdminUserListScreen(role: 'doctor'),
+                ),
+              ),
             ),
           ),
         ],
@@ -161,50 +174,54 @@ class AdminDashboard extends ConsumerWidget {
     );
   }
 
-  Widget _metricCard(String title, String value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.black.withValues(alpha: 0.04)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.01),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          )
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
+  Widget _metricCard(String title, String value, IconData icon, Color color, {VoidCallback? onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.black.withValues(alpha: 0.04)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.01),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            )
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 24),
             ),
-            child: Icon(icon, color: color, size: 24),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
+            const SizedBox(height: 12),
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
             ),
-          ),
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.textSecondary,
-              fontWeight: FontWeight.w500,
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w500,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

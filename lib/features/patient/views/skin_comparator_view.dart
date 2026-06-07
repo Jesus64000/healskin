@@ -258,6 +258,7 @@ class BeforeAfterSliderScreen extends StatefulWidget {
 
 class _BeforeAfterSliderScreenState extends State<BeforeAfterSliderScreen> {
   double _slidePercent = 0.5; // Comienza a la mitad (50%)
+  bool _showSideBySide = false;
 
   @override
   Widget build(BuildContext context) {
@@ -278,127 +279,243 @@ class _BeforeAfterSliderScreenState extends State<BeforeAfterSliderScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // 📦 CONTENEDOR PRINCIPAL DEL COMPARADOR
+              // Selector de modo de comparación (Deslizar vs Lado a Lado)
               Container(
-                height: 480,
-                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 20),
+                padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 2),
+                  color: Colors.white.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                clipBehavior: Clip.antiAlias,
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final width = constraints.maxWidth;
-                    final height = constraints.maxHeight;
-
-                    return Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        // A. FOTO "DESPUÉS" (Fondo)
-                        Image.network(
-                          widget.afterUrl,
-                          width: width,
-                          height: height,
-                          fit: BoxFit.cover,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => setState(() => _showSideBySide = false),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: !_showSideBySide ? AppColors.primary : Colors.transparent,
+                          borderRadius: BorderRadius.circular(10),
                         ),
+                        child: const Text("Deslizar", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                      ),
+                    ),
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => setState(() => _showSideBySide = true),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: _showSideBySide ? AppColors.primary : Colors.transparent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Text("Lado a Lado", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
-                        // B. FOTO "ANTES" (Superior con recorte inteligente)
-                        ClipRect(
-                          clipper: _BeforeAfterClipper(_slidePercent),
-                          child: Image.network(
-                            widget.beforeUrl,
+              if (_showSideBySide)
+                // 📱 VISTA LADO A LADO
+                Expanded(
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: Row(
+                          children: [
+                            // Antes
+                            Expanded(
+                              child: Column(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      "ANTES ($beforeDateStr)",
+                                      style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Expanded(
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 1.5),
+                                      ),
+                                      clipBehavior: Clip.antiAlias,
+                                      child: Image.network(widget.beforeUrl, fit: BoxFit.cover, width: double.infinity, height: double.infinity),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 15),
+                            // Después
+                            Expanded(
+                              child: Column(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      "DESPUÉS ($afterDateStr)",
+                                      style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Expanded(
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 1.5),
+                                      ),
+                                      clipBehavior: Clip.antiAlias,
+                                      child: Image.network(widget.afterUrl, fit: BoxFit.cover, width: double.infinity, height: double.infinity),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                // 📦 CONTENEDOR PRINCIPAL DEL COMPARADOR (SLIDER)
+                Container(
+                  height: 480,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 2),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final width = constraints.maxWidth;
+                      final height = constraints.maxHeight;
+
+                      return Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          // A. FOTO "DESPUÉS" (Fondo)
+                          Image.network(
+                            widget.afterUrl,
                             width: width,
                             height: height,
                             fit: BoxFit.cover,
                           ),
-                        ),
 
-                        // C. LÍNEA DIVISORIA VERTICAL
-                        Positioned(
-                          left: width * _slidePercent - 1.5,
-                          top: 0,
-                          bottom: 0,
-                          child: Container(
-                            width: 3,
-                            color: Colors.white,
+                          // B. FOTO "ANTES" (Superior con recorte inteligente)
+                          ClipRect(
+                            clipper: _BeforeAfterClipper(_slidePercent),
+                            child: Image.network(
+                              widget.beforeUrl,
+                              width: width,
+                              height: height,
+                              fit: BoxFit.cover,
+                            ),
                           ),
-                        ),
 
-                        // D. MANIJA DESLIZABLE CENTRAL
-                        Positioned(
-                          left: width * _slidePercent - 20,
-                          top: height / 2 - 20,
-                          child: Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: AppColors.primary,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 8, spreadRadius: 1)
-                              ],
-                              border: Border.all(color: Colors.white, width: 2.5),
+                          // C. LÍNEA DIVISORIA VERTICAL
+                          Positioned(
+                            left: width * _slidePercent - 1.5,
+                            top: 0,
+                            bottom: 0,
+                            child: Container(
+                              width: 3,
+                              color: Colors.white,
                             ),
-                            child: const Icon(Icons.unfold_more_rounded, color: Colors.white, size: 24),
                           ),
-                        ),
 
-                        // E. ETIQUETAS DE TEXTO
-                        Positioned(
-                          left: 15,
-                          top: 15,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.black54,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
-                            ),
-                            child: Text(
-                              "ANTES ($beforeDateStr)",
-                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5),
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          right: 15,
-                          top: 15,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.black54,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
-                            ),
-                            child: Text(
-                              "DESPUÉS ($afterDateStr)",
-                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                          // D. MANIJA DESLIZABLE CENTRAL
+                          Positioned(
+                            left: width * _slidePercent - 20,
+                            top: height / 2 - 20,
+                            child: Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: AppColors.primary,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 8, spreadRadius: 1)
+                                ],
+                                border: Border.all(color: Colors.white, width: 2.5),
+                              ),
+                              child: const Icon(Icons.unfold_more_rounded, color: Colors.white, size: 24),
                             ),
                           ),
-                        ),
 
-                        // F. GESTOS TÁCTILES (Capa Invisible superior)
-                        Positioned.fill(
-                          child: GestureDetector(
-                            onHorizontalDragUpdate: (details) {
-                              final localX = details.localPosition.dx;
-                              setState(() {
-                                _slidePercent = (localX / width).clamp(0.0, 1.0);
-                              });
-                            },
+                          // E. ETIQUETAS DE TEXTO
+                          Positioned(
+                            left: 15,
+                            top: 15,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                              ),
+                              child: Text(
+                                "ANTES ($beforeDateStr)",
+                                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                              ),
+                            ),
                           ),
-                        ),
-                      ],
-                    );
-                  },
+                          Positioned(
+                            right: 15,
+                            top: 15,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                              ),
+                              child: Text(
+                                "DESPUÉS ($afterDateStr)",
+                                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                              ),
+                            ),
+                          ),
+
+                          // F. GESTOS TÁCTILES (Capa Invisible superior)
+                          Positioned.fill(
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onHorizontalDragUpdate: (details) {
+                                final localX = details.localPosition.dx;
+                                setState(() {
+                                  _slidePercent = (localX / width).clamp(0.0, 1.0);
+                                });
+                              },
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
                 ),
-              ),
               const SizedBox(height: 30),
-              const Text(
-                "Desliza el botón central con tu dedo de izquierda a derecha para comparar los cambios dérmicos.",
+              Text(
+                _showSideBySide
+                    ? "Observa ambas imágenes en su tamaño completo para comparar detalladamente tu evolución clínica."
+                    : "Desliza el botón central con tu dedo de izquierda a derecha para comparar los cambios dérmicos.",
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
+                style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
               ),
             ],
           ),
