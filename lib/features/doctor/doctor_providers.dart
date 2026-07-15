@@ -37,7 +37,7 @@ final myPatientsProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>
   final List<dynamic> appts = appointmentsResponse as List<dynamic>;
   final List<String> patientIds = appts
       .map((item) => (item['patient_id'] ?? '').toString())
-      .where((id) => id.isNotEmpty)
+      .where((id) => id.isNotEmpty && id != doctorId)
       .toSet()
       .toList();
 

@@ -1,12 +1,15 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:image_cropper/image_cropper.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme/app_colors.dart';
 import '../auth/auth_provider.dart';
 import '../auth/login_screen.dart';
 import 'doctor_consultorio_location_screen.dart';
+import '../../core/services/notification_service.dart';
 
 // ============================================================================
 // 🚀 CAPA DE DATOS: Provider del Perfil del Doctor
@@ -17,10 +20,10 @@ final doctorProfileProvider = FutureProvider.autoDispose<Map<String, dynamic>>((
 
   if (user == null) throw Exception('Sesión de usuario no encontrada');
 
-  // Traemos los datos específicos que configuró en el DoctorSetupScreen
+  // Traemos los datos específicos que configuró en el DoctorSetupScreen y perfil profesional
   final response = await supabase
       .from('profiles')
-      .select('full_name, specialty, license_number, office_address, office_lat, office_lng, avatar_url')
+      .select()
       .eq('id', user.id)
       .single();
 
@@ -46,14 +49,37 @@ class _DoctorProfileViewState extends ConsumerState<DoctorProfileView> {
 
     if (pickedFile == null) return;
 
+    // Recortar la foto para permitir que el usuario la encuadre
+    final croppedFile = await ImageCropper().cropImage(
+      sourcePath: pickedFile.path,
+      aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+      uiSettings: [
+        AndroidUiSettings(
+          toolbarTitle: 'Ajustar Foto de Perfil',
+          toolbarColor: AppColors.primary,
+          toolbarWidgetColor: Colors.white,
+          initAspectRatio: CropAspectRatioPreset.square,
+          lockAspectRatio: true,
+          cropStyle: CropStyle.circle,
+        ),
+        IOSUiSettings(
+          title: 'Ajustar Foto de Perfil',
+          aspectRatioLockEnabled: true,
+          cropStyle: CropStyle.circle,
+        ),
+      ],
+    );
+
+    if (croppedFile == null) return;
+
     setState(() => _isUploadingAvatar = true);
 
     try {
-      final file = File(pickedFile.path);
+      final file = File(croppedFile.path);
       final supabase = Supabase.instance.client;
       final userId = supabase.auth.currentUser!.id;
 
-      final fileExtension = pickedFile.path.split('.').last;
+      final fileExtension = croppedFile.path.split('.').last;
       final fileName = 'avatar_doc_${DateTime.now().millisecondsSinceEpoch}.$fileExtension';
       final storagePath = 'avatars/$fileName';
 
@@ -111,7 +137,7 @@ class _DoctorProfileViewState extends ConsumerState<DoctorProfileView> {
                 backgroundColor: AppColors.primary,
                 flexibleSpace: FlexibleSpaceBar(
                   background: Container(color: AppColors.primary),
-                  title: const Text("Mi Perfil Profesional", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  title: const Text("Perfil Profesional", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 ),
               ),
               SliverToBoxAdapter(
@@ -166,7 +192,13 @@ class _DoctorProfileViewState extends ConsumerState<DoctorProfileView> {
                       Icons.access_time,
                       "Horarios de Atención",
                       "Configura tu jornada laboral",
-                      onTap: () => _showHorariosBottomSheet(context),
+                      onTap: () => _showHorariosBottomSheet(context, profile['availability']),
+                    ),
+                    _buildMenuOption(
+                      Icons.settings_suggest_outlined,
+                      "Datos del Especialista",
+                      "Especialidad, experiencia, biografía...",
+                      onTap: () => _showEspecialistaBottomSheet(context, ref, profile),
                     ),
                     _buildMenuOption(
                       Icons.location_on_outlined,
@@ -185,7 +217,33 @@ class _DoctorProfileViewState extends ConsumerState<DoctorProfileView> {
                       "Estado: Activa",
                       onTap: () => _showLicenciaBottomSheet(context, license, specialty),
                     ),
-                    _buildMenuOption(Icons.notifications_none, "Notificaciones", "Alertas de IA y citas"),
+                    _buildMenuOption(
+                      Icons.notifications_none,
+                      "Probar Notificaciones",
+                      "Emitir una alerta de prueba en 5 seg.",
+                      onTap: () async {
+                        final notificationService = NotificationService();
+                        await notificationService.requestPermissions();
+                        
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("🔔 Alerta de prueba agendada en 5 segundos. Sal de la app para verla."),
+                              duration: Duration(seconds: 4),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+
+                        Future.delayed(const Duration(seconds: 5), () async {
+                          await notificationService.showInstantNotification(
+                            id: 9998,
+                            title: "¡Prueba de Notificación Funcional! 🎉",
+                            body: "El canal de comunicación local de HealSkin está operando correctamente en tu dispositivo.",
+                          );
+                        });
+                      },
+                    ),
 
                     const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 30, vertical: 20),
@@ -251,13 +309,13 @@ class _DoctorProfileViewState extends ConsumerState<DoctorProfileView> {
     );
   }
 
-  void _showHorariosBottomSheet(BuildContext context) {
+  void _showHorariosBottomSheet(BuildContext context, String? currentAvailability) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
-        return const _HorariosConfigBottomSheet();
+        return _HorariosConfigBottomSheet(currentAvailability: currentAvailability);
       },
     );
   }
@@ -292,16 +350,142 @@ class _DoctorProfileViewState extends ConsumerState<DoctorProfileView> {
       ),
     );
   }
+
+  void _showEspecialistaBottomSheet(BuildContext context, WidgetRef ref, Map<String, dynamic> profile) {
+    final TextEditingController specialtyController = TextEditingController(text: profile['specialty'] ?? '');
+    final TextEditingController experienceController = TextEditingController(text: (profile['years_experience'] ?? '').toString());
+    final TextEditingController bioController = TextEditingController(text: profile['bio'] ?? '');
+    bool isSaving = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                left: 20, right: 20, top: 20
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text("Datos del Especialista", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                    const SizedBox(height: 15),
+
+                    const Text("Especialidad *", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textSecondary)),
+                    const SizedBox(height: 5),
+                    TextField(
+                      controller: specialtyController,
+                      decoration: InputDecoration(
+                        hintText: "Ej. Dermatólogo Clínico y Cosmético",
+                        filled: true,
+                        fillColor: AppColors.surfaceLight,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    const Text("Años de Experiencia", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textSecondary)),
+                    const SizedBox(height: 5),
+                    TextField(
+                      controller: experienceController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        hintText: "Ej. 5",
+                        filled: true,
+                        fillColor: AppColors.surfaceLight,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    const Text("Biografía / Perfil Profesional", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textSecondary)),
+                    const SizedBox(height: 5),
+                    TextField(
+                      controller: bioController,
+                      maxLines: 4,
+                      decoration: InputDecoration(
+                        hintText: "Escribe un breve resumen sobre tu trayectoria y enfoque...",
+                        filled: true,
+                        fillColor: AppColors.surfaceLight,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: isSaving ? null : () async {
+                          final spec = specialtyController.text.trim();
+                          if (spec.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("La especialidad es obligatoria"), backgroundColor: AppColors.danger));
+                            return;
+                          }
+
+                          final exp = int.tryParse(experienceController.text.trim());
+                          final bio = bioController.text.trim();
+
+                          setState(() => isSaving = true);
+                          try {
+                            final user = Supabase.instance.client.auth.currentUser;
+                            if (user != null) {
+                              await Supabase.instance.client.from('profiles').update({
+                                'specialty': spec,
+                                'years_experience': exp,
+                                'bio': bio.isEmpty ? null : bio,
+                              }).eq('id', user.id);
+
+                              ref.invalidate(doctorProfileProvider);
+
+                              if (context.mounted) {
+                                Navigator.pop(context);
+                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Datos actualizados con éxito"), backgroundColor: AppColors.success));
+                              }
+                            }
+                          } catch (e) {
+                            setState(() => isSaving = false);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: AppColors.danger));
+                            }
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          padding: const EdgeInsets.symmetric(vertical: 15),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                        ),
+                        child: isSaving
+                            ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : const Text("Guardar Cambios", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+        );
+      }
+    );
+  }
 }
 
-class _HorariosConfigBottomSheet extends StatefulWidget {
-  const _HorariosConfigBottomSheet();
+class _HorariosConfigBottomSheet extends ConsumerStatefulWidget {
+  final String? currentAvailability;
+  const _HorariosConfigBottomSheet({this.currentAvailability});
 
   @override
-  State<_HorariosConfigBottomSheet> createState() => _HorariosConfigBottomSheetState();
+  ConsumerState<_HorariosConfigBottomSheet> createState() => _HorariosConfigBottomSheetState();
 }
 
-class _HorariosConfigBottomSheetState extends State<_HorariosConfigBottomSheet> {
+class _HorariosConfigBottomSheetState extends ConsumerState<_HorariosConfigBottomSheet> {
   final Map<String, bool> _diasActivos = {
     "Lunes": true,
     "Martes": true,
@@ -322,7 +506,33 @@ class _HorariosConfigBottomSheetState extends State<_HorariosConfigBottomSheet> 
     "Domingo": "Cerrado",
   };
 
+  @override
+  void initState() {
+    super.initState();
+    if (widget.currentAvailability != null && widget.currentAvailability!.startsWith('{')) {
+      try {
+        final Map<String, dynamic> decoded = jsonDecode(widget.currentAvailability!);
+        decoded.forEach((day, time) {
+          if (_diasActivos.containsKey(day)) {
+            _diasActivos[day] = time != 'Cerrado';
+            _horasDia[day] = time;
+          }
+        });
+      } catch (e) {
+        debugPrint("Error parsing initial availability: $e");
+      }
+    }
+  }
+
   bool _isSaving = false;
+
+  String _formatTimeOfDay(TimeOfDay time) {
+    final hour = time.hourOfPeriod;
+    final minute = time.minute.toString().padLeft(2, '0');
+    final period = time.period == DayPeriod.am ? 'AM' : 'PM';
+    final hourStr = (hour == 0 ? 12 : hour).toString().padLeft(2, '0');
+    return "$hourStr:$minute $period";
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -396,6 +606,12 @@ class _HorariosConfigBottomSheetState extends State<_HorariosConfigBottomSheet> 
                               context: context,
                               initialTime: const TimeOfDay(hour: 8, minute: 0),
                               helpText: "Hora de apertura de $dia",
+                              builder: (context, child) {
+                                return MediaQuery(
+                                  data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+                                  child: child!,
+                                );
+                              },
                             );
                             if (pickedStart == null) return;
                             if (!context.mounted) return;
@@ -403,11 +619,17 @@ class _HorariosConfigBottomSheetState extends State<_HorariosConfigBottomSheet> 
                               context: context,
                               initialTime: const TimeOfDay(hour: 16, minute: 0),
                               helpText: "Hora de cierre de $dia",
+                              builder: (context, child) {
+                                return MediaQuery(
+                                  data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+                                  child: child!,
+                                );
+                              },
                             );
                             if (pickedEnd == null) return;
 
                             setState(() {
-                              _horasDia[dia] = "${pickedStart.format(context)} - ${pickedEnd.format(context)}";
+                              _horasDia[dia] = "${_formatTimeOfDay(pickedStart)} - ${_formatTimeOfDay(pickedEnd)}";
                             });
                           },
                           child: Container(
@@ -442,16 +664,49 @@ class _HorariosConfigBottomSheetState extends State<_HorariosConfigBottomSheet> 
           ElevatedButton(
             onPressed: _isSaving ? null : () async {
               setState(() => _isSaving = true);
-              await Future.delayed(const Duration(seconds: 1)); // Simular guardado
-              if (!context.mounted) return;
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text("Horarios de atención actualizados con éxito."),
-                  backgroundColor: AppColors.success,
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
+              try {
+                final Map<String, String> dataToSave = {};
+                _diasActivos.forEach((day, active) {
+                  if (active) {
+                    dataToSave[day] = _horasDia[day] ?? "08:00 AM - 04:00 PM";
+                  } else {
+                    dataToSave[day] = "Cerrado";
+                  }
+                });
+                
+                final jsonStr = jsonEncode(dataToSave);
+                final supabase = Supabase.instance.client;
+                final userId = supabase.auth.currentUser!.id;
+                
+                await supabase.from('profiles').update({
+                  'availability': jsonStr,
+                }).eq('id', userId);
+                
+                ref.invalidate(doctorProfileProvider);
+                
+                if (mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text("Horarios de atención actualizados con éxito."),
+                      backgroundColor: AppColors.success,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text("Error al guardar horarios: $e"),
+                      backgroundColor: AppColors.danger,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              } finally {
+                if (mounted) setState(() => _isSaving = false);
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,

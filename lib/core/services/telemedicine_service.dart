@@ -8,7 +8,13 @@ class TelemedicineService {
   // Extraemos la llave de forma segura desde la configuración local
   final String appId = dotenv.env['AGORA_APP_ID'] ?? '';
 
-  late RtcEngine engine;
+  RtcEngine? _engine;
+  RtcEngine get engine {
+    if (_engine == null) {
+      throw StateError("RtcEngine no inicializado. Llama a initialize() primero.");
+    }
+    return _engine!;
+  }
 
   // Callbacks para actualizar la UI reactivamente
   Function(int uid)? onUserJoined;
@@ -25,14 +31,14 @@ class TelemedicineService {
     await [Permission.camera, Permission.microphone].request();
 
     // 2. Crear instancia del motor WebRTC
-    engine = createAgoraRtcEngine();
-    await engine.initialize(RtcEngineContext(
+    final rtcEngine = createAgoraRtcEngine();
+    await rtcEngine.initialize(RtcEngineContext(
       appId: appId,
       channelProfile: ChannelProfileType.channelProfileCommunication,
     ));
 
     // 3. Configurar eventos reactivos de Agora
-    engine.registerEventHandler(
+    rtcEngine.registerEventHandler(
       RtcEngineEventHandler(
           onJoinChannelSuccess: (RtcConnection connection, int elapsed) {
             debugPrint("Local user joined: ${connection.localUid}");
@@ -52,8 +58,10 @@ class TelemedicineService {
     );
 
     // 4. Habilitar el módulo de video
-    await engine.enableVideo();
-    await engine.startPreview(); // Enciende la cámara local antes de entrar a la sala
+    await rtcEngine.enableVideo();
+    await rtcEngine.startPreview(); // Enciende la cámara local antes de entrar a la sala
+
+    _engine = rtcEngine;
   }
 
   Future<void> joinChannel({required String channelName, required String token, required int uid}) async {
@@ -72,15 +80,24 @@ class TelemedicineService {
   }
 
   Future<void> toggleMic(bool isMuted) async {
-    await engine.muteLocalAudioStream(isMuted);
+    await _engine?.muteLocalAudioStream(isMuted);
   }
 
   Future<void> toggleCamera(bool isCameraOff) async {
-    await engine.muteLocalVideoStream(isCameraOff);
+    await _engine?.muteLocalVideoStream(isCameraOff);
   }
 
   Future<void> leaveChannel() async {
-    await engine.leaveChannel();
-    await engine.release(); // Libera la memoria en RAM (Crucial para no crashear la app en la siguiente llamada)
+    final rtcEngine = _engine;
+    if (rtcEngine != null) {
+      try {
+        await rtcEngine.leaveChannel();
+        await rtcEngine.release();
+      } catch (e) {
+        debugPrint("Error al liberar RtcEngine: $e");
+      } finally {
+        _engine = null;
+      }
+    }
   }
 }

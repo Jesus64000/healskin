@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../auth/profile_provider.dart'; // Ajusta si el nombre de tu archivo es distinto
@@ -29,6 +30,29 @@ class _DoctorDetailScreenState extends ConsumerState<DoctorDetailScreen> {
     }
   }
 
+  String _formatAvailability(dynamic availability) {
+    if (availability == null) return 'Consultar horario';
+    if (availability is String) {
+      if (availability.startsWith('{')) {
+        try {
+          final Map<String, dynamic> map = jsonDecode(availability);
+          final List<String> parts = [];
+          map.forEach((key, value) {
+            if (value != null && value != "Cerrado") {
+              parts.add("$key: $value");
+            }
+          });
+          if (parts.isEmpty) return 'No laborable';
+          return parts.join("\n");
+        } catch (e) {
+          return availability;
+        }
+      }
+      return availability;
+    }
+    return 'Consultar horario';
+  }
+
   // 🚀 LA LÓGICA MAESTRA DE AGENDAMIENTO
   Future<void> _processBooking(BuildContext context, String type, String doctorName) async {
     // 1. Pedimos al usuario que seleccione la fecha
@@ -37,6 +61,7 @@ class _DoctorDetailScreenState extends ConsumerState<DoctorDetailScreen> {
       initialDate: DateTime.now().add(const Duration(days: 1)), // Mañana por defecto
       firstDate: DateTime.now(), // No se puede viajar al pasado
       lastDate: DateTime.now().add(const Duration(days: 60)), // Hasta 2 meses
+      locale: const Locale('es', 'ES'),
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -58,15 +83,18 @@ class _DoctorDetailScreenState extends ConsumerState<DoctorDetailScreen> {
       context: context,
       initialTime: const TimeOfDay(hour: 9, minute: 0), // 9:00 AM por defecto
       builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: AppColors.primary,
-              onPrimary: Colors.white,
-              onSurface: AppColors.textPrimary,
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+          child: Theme(
+            data: Theme.of(context).copyWith(
+              colorScheme: const ColorScheme.light(
+                primary: AppColors.primary,
+                onPrimary: Colors.white,
+                onSurface: AppColors.textPrimary,
+              ),
             ),
+            child: child!,
           ),
-          child: child!,
         );
       },
     );
@@ -98,6 +126,7 @@ class _DoctorDetailScreenState extends ConsumerState<DoctorDetailScreen> {
       // 3. Forzamos a que la lista principal se actualice para mostrar a "Tu Doctor"
       ref.invalidate(primaryDoctorProvider);
       ref.invalidate(availableDoctorsProvider);
+      ref.invalidate(myAppointmentsProvider);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -136,11 +165,11 @@ class _DoctorDetailScreenState extends ConsumerState<DoctorDetailScreen> {
 
           final name = doctorData['full_name'] ?? 'Doctor';
           final avatarIcon = _getIconData(doctorData['avatar_type']);
-          final availability = doctorData['availability'] ?? 'Consultar horario';
+          final availability = _formatAvailability(doctorData['availability']);
           final specialty = doctorData['specialty'] ?? 'Especialista en Dermatología';
           final bio = doctorData['bio'] ?? 'Especialista clínico con amplia experiencia en el diagnóstico temprano y tratamiento de patologías de la piel asistido por tecnología.';
-          final patientsCount = doctorData['patients_count']?.toString() ?? 'N/A';
-          final experienceYears = doctorData['experience_years']?.toString() ?? '-';
+          final patientsCount = doctorData['patient_count']?.toString() ?? 'N/A';
+          final experienceYears = doctorData['years_experience']?.toString() ?? '-';
           final rating = doctorData['rating']?.toString() ?? '-.-';
 
           return Stack(
@@ -173,7 +202,17 @@ class _DoctorDetailScreenState extends ConsumerState<DoctorDetailScreen> {
                                 shape: BoxShape.circle,
                                 boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 15, offset: const Offset(0, 5))],
                               ),
-                              child: Icon(avatarIcon, size: 60, color: AppColors.textSecondary),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(50),
+                                child: doctorData['avatar_url'] != null && (doctorData['avatar_url'] as String).isNotEmpty
+                                    ? Image.network(
+                                        doctorData['avatar_url'] as String,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (context, error, stackTrace) =>
+                                            Icon(avatarIcon, size: 60, color: AppColors.textSecondary),
+                                      )
+                                    : Icon(avatarIcon, size: 60, color: AppColors.textSecondary),
+                              ),
                             ),
                             const SizedBox(height: 15),
                             Text(name, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
@@ -190,13 +229,8 @@ class _DoctorDetailScreenState extends ConsumerState<DoctorDetailScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                            children: [
-                              _buildStatCard("Pacientes", patientsCount, Icons.people_outline),
-                              _buildStatCard("Experiencia", "$experienceYears años", Icons.work_outline),
-                              _buildStatCard("Rating", rating, Icons.star_border),
-                            ],
+                          Center(
+                            child: _buildStatCard("Experiencia", "$experienceYears años", Icons.work_outline),
                           ),
                           const SizedBox(height: 30),
 
@@ -221,7 +255,32 @@ class _DoctorDetailScreenState extends ConsumerState<DoctorDetailScreen> {
                               ],
                             ),
                           ),
-                          const SizedBox(height: 150), // Espacio para botones + cargador
+                          const SizedBox(height: 25),
+
+                          const Text("Consultorio / Dirección", style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 10),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(15),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(alpha: 0.05),
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(Icons.location_on_outlined, color: AppColors.primary),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    doctorData['office_address'] ?? 'Consulta en Sede Central HealSkin',
+                                    style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w500),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 220), // Espacio para botones + cargador
                         ],
                       ),
                     ),

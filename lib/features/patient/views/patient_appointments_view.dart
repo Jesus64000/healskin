@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/theme/app_colors.dart';
 import 'patient_appointments_provider.dart';
 import 'patient_clinic_view.dart';
+import 'patient_procedures_provider.dart';
+import '../../auth/profile_provider.dart';
 // 🚀 IMPORTAMOS LA PANTALLA DE VIDEOCONSULTA
 import '../../../features/doctor/telemedicine_room_screen.dart';
+
+final citasSubTabProvider = StateProvider<int>((ref) => 0);
 
 class PatientAppointmentsView extends ConsumerWidget {
   const PatientAppointmentsView({super.key});
@@ -14,23 +19,30 @@ class PatientAppointmentsView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // 🧠 Escuchamos el StreamProvider (cambia de .watch a manejar un AsyncValue de Stream)
     final appointmentsAsync = ref.watch(myAppointmentsProvider);
+    final subTabIndex = ref.watch(citasSubTabProvider);
 
     return DefaultTabController(
-      length: 2,
+      key: ValueKey(subTabIndex),
+      initialIndex: subTabIndex,
+      length: 3,
       child: Scaffold(
         backgroundColor: AppColors.backgroundLight,
         appBar: AppBar(
           backgroundColor: AppColors.primary,
           elevation: 0,
           automaticallyImplyLeading: false, // Evita flechas fantasmas si viene del flujo de agendamiento
-          title: const Text("Mis Citas Médicas", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-          bottom: const TabBar(
+          title: const Text("Mis Citas e Indicaciones", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+          bottom: TabBar(
             indicatorColor: Colors.white,
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white70,
-            tabs: [
+            onTap: (index) {
+              ref.read(citasSubTabProvider.notifier).state = index;
+            },
+            tabs: const [
               Tab(text: "Próximas"),
               Tab(text: "Historial"),
+              Tab(text: "Indicaciones"),
             ],
           ),
         ),
@@ -56,6 +68,7 @@ class PatientAppointmentsView extends ConsumerWidget {
               children: [
                 _buildAppointmentsList(context, ref, upcoming, isPast: false),
                 _buildAppointmentsList(context, ref, past, isPast: true),
+                _buildProceduresList(context, ref),
               ],
             );
           },
@@ -164,7 +177,7 @@ class PatientAppointmentsView extends ConsumerWidget {
                       children: [
                         const Icon(Icons.calendar_month, size: 18, color: AppColors.primary),
                         const SizedBox(width: 6),
-                        Text(DateFormat('dd MMMM, yyyy').format(date), style: const TextStyle(fontWeight: FontWeight.w500, color: AppColors.textPrimary)),
+                        Text(DateFormat('dd MMMM, yyyy', 'es').format(date), style: const TextStyle(fontWeight: FontWeight.w500, color: AppColors.textPrimary)),
                       ],
                     ),
                     Row(
@@ -198,7 +211,9 @@ class PatientAppointmentsView extends ConsumerWidget {
                                 isDoctor: false, // 🔴 IMPORTANTE: Declaramos que es el Paciente
                               ),
                             ),
-                          );
+                          ).then((_) {
+                            ref.invalidate(myAppointmentsProvider);
+                          });
                         } : null,
                         icon: Icon(
                             isDoctorInRoom ? Icons.video_call : Icons.hourglass_empty,
@@ -221,7 +236,7 @@ class PatientAppointmentsView extends ConsumerWidget {
                       width: double.infinity,
                       child: OutlinedButton.icon(
                         onPressed: () {
-                          _showClinicDirections(context);
+                          _showClinicDirections(context, apt['doctor']?['office_address']);
                         },
                         icon: const Icon(Icons.map_outlined, color: AppColors.primary),
                         label: const Text("Ver indicaciones de la Clínica", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
@@ -281,6 +296,27 @@ class PatientAppointmentsView extends ConsumerWidget {
                       ),
                     ],
                   ),
+                ],
+                // 🚀 SECCIÓN DE ACCIONES PARA HISTORIAL (Eliminar cita)
+                if (isPast) ...[
+                  const SizedBox(height: 15),
+                  const Divider(height: 15, thickness: 1),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton.icon(
+                      onPressed: () => _confirmDeleteAppointment(context, ref, appointmentId),
+                      icon: const Icon(Icons.delete_outline_rounded, color: AppColors.danger, size: 18),
+                      label: const Text(
+                        "Eliminar del Historial",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.danger,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
                 ]
               ],
             ),
@@ -290,7 +326,22 @@ class PatientAppointmentsView extends ConsumerWidget {
     );
   }
 
-  void _showClinicDirections(BuildContext context) {
+  void _showClinicDirections(BuildContext context, String? officeAddress) {
+    String clinicName = "Sede Central HealSkin";
+    String address = "Av. Principal de la Salud, Edificio Medical Plaza, Piso 3, Consultorio 302.";
+    
+    if (officeAddress != null && officeAddress.isNotEmpty) {
+      final parts = officeAddress.split(',');
+      if (parts.isNotEmpty) {
+        clinicName = parts[0].trim();
+        if (parts.length > 1) {
+          address = parts.sublist(1).join(',').trim();
+        } else {
+          address = officeAddress;
+        }
+      }
+    }
+
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
@@ -301,14 +352,14 @@ class PatientAppointmentsView extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Column(
+              Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.local_hospital, color: AppColors.primary, size: 44),
-                  SizedBox(height: 12),
+                  const Icon(Icons.local_hospital, color: AppColors.primary, size: 44),
+                  const SizedBox(height: 12),
                   Text(
-                    "Sede Central HealSkin", 
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                    clinicName, 
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -316,7 +367,7 @@ class PatientAppointmentsView extends ConsumerWidget {
               const SizedBox(height: 20),
               const Text("📍 Dirección:", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
               Text(
-                "Av. Principal de la Salud, Edificio Medical Plaza, Piso 3, Consultorio 302.", 
+                address, 
                 style: const TextStyle(color: AppColors.textSecondary),
                 textAlign: TextAlign.justify,
               ),
@@ -389,6 +440,7 @@ class PatientAppointmentsView extends ConsumerWidget {
               onPressed: () async {
                 try {
                   await ref.read(appointmentControllerProvider).cancelAppointment(appointmentId);
+                  ref.invalidate(myAppointmentsProvider);
                   if (context.mounted) {
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -420,6 +472,88 @@ class PatientAppointmentsView extends ConsumerWidget {
                 elevation: 2,
               ),
               child: const Text("Sí, Cancelar", style: TextStyle(fontWeight: FontWeight.bold)),
+            )
+          ],
+        );
+      },
+    );
+  }
+
+  void _confirmDeleteAppointment(BuildContext context, WidgetRef ref, String appointmentId) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: const Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.delete_forever_rounded, color: AppColors.danger, size: 44),
+              SizedBox(height: 12),
+              Text(
+                "¿Eliminar del Historial?",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: AppColors.textPrimary),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+          content: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 8.0),
+            child: Text(
+              "Esta acción eliminará de forma permanente la cita de tu historial. No se podrá recuperar.",
+              style: TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.5),
+              textAlign: TextAlign.justify,
+            ),
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            OutlinedButton(
+              onPressed: () => Navigator.pop(context),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.textSecondary,
+                side: const BorderSide(color: Colors.grey),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              ),
+              child: const Text("Volver", style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+            const SizedBox(width: 10),
+            ElevatedButton(
+              onPressed: () async {
+                try {
+                  await ref.read(appointmentControllerProvider).deleteAppointment(appointmentId);
+                  ref.invalidate(myAppointmentsProvider);
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Cita eliminada correctamente del historial."),
+                        backgroundColor: AppColors.success,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text("Error al eliminar la cita: $e"),
+                        backgroundColor: AppColors.danger,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.danger,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                elevation: 2,
+              ),
+              child: const Text("Sí, Eliminar", style: TextStyle(fontWeight: FontWeight.bold)),
             )
           ],
         );
@@ -499,65 +633,71 @@ class PatientAppointmentsView extends ConsumerWidget {
                   ),
                   const SizedBox(height: 20),
 
-                  // SELECCIÓN DE FECHA Y HORA
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text("Fecha:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                            const SizedBox(height: 8),
-                            OutlinedButton.icon(
-                              onPressed: () async {
-                                final DateTime? picked = await showDatePicker(
-                                  context: context,
-                                  initialDate: selectedDate,
-                                  firstDate: DateTime.now(),
-                                  lastDate: DateTime.now().add(const Duration(days: 60)),
-                                );
-                                if (picked != null) {
-                                  setModalState(() => selectedDate = picked);
-                                }
-                              },
-                              icon: const Icon(Icons.calendar_month, size: 16),
-                              label: Text(DateFormat('dd/MM/yyyy').format(selectedDate)),
-                              style: OutlinedButton.styleFrom(
-                                side: const BorderSide(color: Colors.grey),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              ),
-                            ),
-                          ],
-                        ),
+                  // SE LA SELECCIÓN DE FECHA Y HORA
+                  const Text("Fecha:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        final DateTime? picked = await showDatePicker(
+                          context: context,
+                          initialDate: selectedDate,
+                          firstDate: DateTime.now(),
+                          lastDate: DateTime.now().add(const Duration(days: 60)),
+                          locale: const Locale('es', 'ES'),
+                        );
+                        if (picked != null) {
+                          setModalState(() => selectedDate = picked);
+                        }
+                      },
+                      icon: const Icon(Icons.calendar_month, size: 16),
+                      label: Text(DateFormat('dd/MM/yyyy').format(selectedDate)),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Colors.grey),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      const SizedBox(width: 15),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text("Hora:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                            const SizedBox(height: 8),
-                            OutlinedButton.icon(
-                              onPressed: () async {
-                                final TimeOfDay? picked = await showTimePicker(
-                                  context: context,
-                                  initialTime: selectedTime,
-                                );
-                                if (picked != null) {
-                                  setModalState(() => selectedTime = picked);
-                                }
-                              },
-                              icon: const Icon(Icons.access_time, size: 16),
-                              label: Text(selectedTime.format(context)),
-                              style: OutlinedButton.styleFrom(
-                                side: const BorderSide(color: Colors.grey),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                  const SizedBox(height: 15),
+                  const Text("Hora:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        final TimeOfDay? picked = await showTimePicker(
+                          context: context,
+                          initialTime: selectedTime,
+                          builder: (context, child) {
+                            return MediaQuery(
+                              data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+                              child: Theme(
+                                data: Theme.of(context).copyWith(
+                                  colorScheme: const ColorScheme.light(
+                                    primary: AppColors.primary,
+                                    onPrimary: Colors.white,
+                                    onSurface: AppColors.textPrimary,
+                                  ),
+                                ),
+                                child: child!,
                               ),
-                            ),
-                          ],
-                        ),
+                            );
+                          },
+                        );
+                        if (picked != null) {
+                          setModalState(() => selectedTime = picked);
+                        }
+                      },
+                      icon: const Icon(Icons.access_time, size: 16),
+                      label: Text(selectedTime.format(context)),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Colors.grey),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                    ],
+                    ),
                   ),
                   const SizedBox(height: 20),
 
@@ -594,6 +734,7 @@ class PatientAppointmentsView extends ConsumerWidget {
                           type: selectedType,
                           reason: reasonController.text.trim(),
                         );
+                        ref.invalidate(myAppointmentsProvider);
 
                         if (context.mounted) {
                           Navigator.pop(context);
@@ -631,8 +772,390 @@ class PatientAppointmentsView extends ConsumerWidget {
               ),
             );
           },
+      );
+    },
+  );
+}
+
+Widget _buildProceduresList(BuildContext context, WidgetRef ref) {
+  final proceduresAsync = ref.watch(patientProceduresProvider);
+
+  return proceduresAsync.when(
+    loading: () => const Center(child: CircularProgressIndicator(color: AppColors.primary)),
+    error: (err, _) => Center(child: Text("Error al cargar indicaciones: $err")),
+    data: (procedures) {
+      if (procedures.isEmpty) {
+        return const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.medical_services_outlined, size: 60, color: Colors.grey),
+              SizedBox(height: 15),
+              Text(
+                "No tienes indicaciones registradas",
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 16, fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
         );
-      },
-    );
+      }
+
+      // Separar indicaciones activas y completadas
+      final active = procedures.where((p) => p['status'] == 'active').toList();
+      final completed = procedures.where((p) => p['status'] != 'active').toList();
+
+      return ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          if (active.isNotEmpty) ...[
+            const Text(
+              "Tratamientos Activos",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+            ),
+            const SizedBox(height: 10),
+            ...active.map((proc) => _buildProcedureCard(context, ref, proc, isActive: true)),
+            const SizedBox(height: 20),
+          ],
+          if (completed.isNotEmpty) ...[
+            const Text(
+              "Historial de Tratamientos",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+            ),
+            const SizedBox(height: 10),
+            ...completed.map((proc) => _buildProcedureCard(context, ref, proc, isActive: false)),
+          ],
+        ],
+      );
+    },
+  );
+}
+
+Widget _buildProcedureCard(BuildContext context, WidgetRef ref, Map<String, dynamic> proc, {required bool isActive}) {
+  final date = DateTime.parse(proc['created_at']).toLocal();
+  final dateFormatted = DateFormat('dd MMMM, yyyy', 'es').format(date);
+  final doctorName = proc['doctor'] != null ? "Dr/Dra. ${proc['doctor']['full_name']}" : "Especialista";
+
+  return Card(
+    elevation: 2,
+    margin: const EdgeInsets.only(bottom: 12),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+    child: InkWell(
+      onTap: () => _showProcedureDetailSheet(context, ref, proc),
+      borderRadius: BorderRadius.circular(15),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            CircleAvatar(
+              backgroundColor: isActive ? AppColors.primary.withValues(alpha: 0.1) : Colors.grey.withValues(alpha: 0.1),
+              child: Icon(
+                isActive ? Icons.spa_outlined : Icons.check_circle_outline,
+                color: isActive ? AppColors.primary : Colors.grey,
+              ),
+            ),
+            const SizedBox(width: 15),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    proc['procedure_name'] ?? 'Tratamiento',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.textPrimary),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    "${formatFrequencyDays(proc['frequency_days'] ?? 0)} • $doctorName",
+                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    "Recetado: $dateFormatted",
+                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+Future<Map<String, dynamic>?> _fetchMedicalNoteForProcedure(String patientId, String doctorId) async {
+  try {
+    final response = await Supabase.instance.client
+        .from('medical_notes')
+        .select('clinical_diagnosis, prescription_notes, follow_up_plan')
+        .eq('patient_id', patientId)
+        .eq('doctor_id', doctorId)
+        .order('created_at', ascending: false)
+        .limit(1)
+        .maybeSingle();
+    return response;
+  } catch (e) {
+    debugPrint("Error fetching medical note for procedure: $e");
+    return null;
   }
+}
+
+void _showProcedureDetailSheet(BuildContext context, WidgetRef ref, Map<String, dynamic> proc) {
+  final date = DateTime.parse(proc['created_at']).toLocal();
+  final dateFormatted = DateFormat('dd MMMM, yyyy - hh:mm a', 'es').format(date);
+  final doctorName = proc['doctor'] != null ? "Dr/Dra. ${proc['doctor']['full_name']}" : "Especialista";
+  final isActive = proc['status'] == 'active';
+
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+    builder: (context) {
+      return FutureBuilder<Map<String, dynamic>?>(
+        future: _fetchMedicalNoteForProcedure(proc['patient_id'], proc['doctor_id']),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const SizedBox(
+              height: 250,
+              child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+            );
+          }
+          
+          final note = snapshot.data;
+          final diagnosis = note?['clinical_diagnosis'] ?? 'No especificado por el médico';
+          final prescription = note?['prescription_notes'] ?? '';
+          
+          // Parsear receta
+          String topical = '';
+          String oral = '';
+          if (prescription.contains('[Tópico]') || prescription.contains('[Vía Oral]')) {
+            final RegExp topicalReg = RegExp(r'\[Tópico\]\n([\s\S]*?)(?=\n\n\[Vía Oral\]|$)');
+            final RegExp oralReg = RegExp(r'\[Vía Oral\]\n([\s\S]*?)$');
+            
+            final topicalMatch = topicalReg.firstMatch(prescription);
+            final oralMatch = oralReg.firstMatch(prescription);
+            
+            topical = (topicalMatch?.group(1) ?? '').trim();
+            oral = (oralMatch?.group(1) ?? '').trim();
+            if (topical == 'Ninguno') topical = '';
+            if (oral == 'Ninguno') oral = '';
+          } else {
+            topical = prescription;
+          }
+
+          return Container(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.85,
+            ),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          proc['procedure_name'] ?? 'Procedimiento',
+                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: isActive ? AppColors.primary.withValues(alpha: 0.1) : Colors.grey.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          isActive ? 'ACTIVO' : 'COMPLETADO',
+                          style: TextStyle(
+                            color: isActive ? AppColors.primary : Colors.grey,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 15),
+                  _buildModalDetailRow(Icons.person_outline, "Médico Prescriptor", doctorName),
+                  _buildModalDetailRow(Icons.calendar_today_outlined, "Fecha Prescripción", dateFormatted),
+                  _buildModalDetailRow(Icons.repeat_outlined, "Frecuencia de Cuidado", formatFrequencyDays(proc['frequency_days'] ?? 0)),
+                  
+                  const Divider(height: 30),
+                  
+                  // Diagnóstico Oficial (NUEVO)
+                  const Text(
+                    "Diagnóstico Médico Oficial:",
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(15),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
+                    ),
+                    child: Text(
+                      diagnosis,
+                      style: const TextStyle(fontSize: 13, height: 1.5, fontWeight: FontWeight.bold, color: AppColors.primary),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Tratamientos Divididos (NUEVO)
+                  if (topical.isNotEmpty) ...[
+                    const Text(
+                      "Tratamiento Tópico (Cremas, Geles, Lociones):",
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(15),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceLight,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        topical,
+                        style: const TextStyle(fontSize: 13, height: 1.5, color: AppColors.textPrimary),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+
+                  if (oral.isNotEmpty) ...[
+                    const Text(
+                      "Tratamiento Vía Oral / Tomado:",
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(15),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceLight,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        oral,
+                        style: const TextStyle(fontSize: 13, height: 1.5, color: AppColors.textPrimary),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+
+                  if (topical.isEmpty && oral.isEmpty) ...[
+                    const Text(
+                      "Receta Médica:",
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(15),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceLight,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Text(
+                        "No se registraron medicamentos para este tratamiento.",
+                        style: const TextStyle(fontSize: 13, height: 1.5, color: AppColors.textSecondary),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+
+                  // Indicaciones de cuidado / Notas del procedimiento
+                  const Text(
+                    "Notas de Cuidado del Tratamiento:",
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(15),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceLight,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      proc['instructions'] ?? 'No se especificaron indicaciones adicionales para este tratamiento.',
+                      style: const TextStyle(fontSize: 13, height: 1.5, color: AppColors.textPrimary),
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 25),
+                  if (isActive)
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () async {
+                          try {
+                            await ref.read(proceduresControllerProvider).updateProcedureStatus(
+                              procedureId: proc['id'],
+                              status: 'completed',
+                            );
+                            if (context.mounted) {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text("Tratamiento marcado como completado y alarma desactivada"), backgroundColor: AppColors.success),
+                              );
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text("Error: $e"), backgroundColor: AppColors.danger),
+                              );
+                            }
+                          }
+                        },
+                        icon: const Icon(Icons.check_circle_outline, color: Colors.white),
+                        label: const Text("Marcar como Realizado", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 10),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    },
+  );
+}
+
+Widget _buildModalDetailRow(IconData icon, String label, String value) {
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 6.0),
+    child: Row(
+      children: [
+        Icon(icon, size: 18, color: AppColors.textSecondary),
+        const SizedBox(width: 10),
+        Text(
+          "$label: ",
+          style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    ),
+  );
+}
 }

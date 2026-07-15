@@ -98,7 +98,33 @@ final medicalCentersProvider = FutureProvider.autoDispose<List<Map<String, dynam
       .select()
       .order('name', ascending: true);
 
-  return List<Map<String, dynamic>>.from(response);
+  final list = List<Map<String, dynamic>>.from(response);
+  return list.map((item) {
+    final mapped = Map<String, dynamic>.from(item);
+    mapped['lat'] = (mapped['latitude'] as num?)?.toDouble();
+    mapped['lng'] = (mapped['longitude'] as num?)?.toDouble();
+    mapped['status_text'] = mapped['status_text'] ?? '';
+    mapped['is_open'] = true;
+    return mapped;
+  }).toList();
+});
+
+// 3.5. Provider de Filtros del Mapa (con fallback tolerante a fallos si la tabla no existe)
+final mapFiltersProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  final supabase = Supabase.instance.client;
+  try {
+    final response = await supabase
+        .from('map_filters')
+        .select()
+        .order('name', ascending: true);
+    return List<Map<String, dynamic>>.from(response);
+  } catch (e) {
+    debugPrint("⚠️ Tabla map_filters no encontrada o error: $e. Usando filtros por defecto.");
+    return [
+      {'id': 'default-derm', 'name': 'Dermatología', 'keywords': 'derm'},
+      {'id': 'default-estet', 'name': 'Estética', 'keywords': 'estét, estet, laser'},
+    ];
+  }
 });
 
 // 🚀 CLASE NOTIFIER PARA LA LÍNEA DE TIEMPO CON CACHÉ LOCAL
@@ -194,6 +220,25 @@ final doctorDetailProvider = FutureProvider.autoDispose.family<Map<String, dynam
   return response;
 });
 
+// 🗺️ PROVEEDOR DE UBICACIONES DE DOCTORES (FILTRADO POR COORDENADAS)
+final doctorsLocationsProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  final supabase = Supabase.instance.client;
+  final currentUser = supabase.auth.currentUser;
+  var query = supabase
+      .from('profiles')
+      .select('id, full_name, specialty, office_address, office_lat, office_lng')
+      .eq('role', 'doctor')
+      .not('office_lat', 'is', null)
+      .not('office_lng', 'is', null);
+
+  if (currentUser != null) {
+    query = query.neq('id', currentUser.id);
+  }
+
+  final response = await query;
+  return List<Map<String, dynamic>>.from(response as List);
+});
+
 Map<String, String> parseArticleCategory(String? categoryCombined) {
   final category = categoryCombined ?? '';
   if (category.contains('|')) {
@@ -220,4 +265,22 @@ Map<String, String> parseArticleCategory(String? categoryCombined) {
     'name': category,
   };
 }
+
+String formatFrequencyDays(int days) {
+  if (days <= 0) return "Una sola vez";
+  if (days % 365 == 0) {
+    final years = days ~/ 365;
+    return years == 1 ? "Cada año" : "Cada $years años";
+  }
+  if (days % 30 == 0) {
+    final months = days ~/ 30;
+    return months == 1 ? "Cada mes" : "Cada $months meses";
+  }
+  if (days % 7 == 0) {
+    final weeks = days ~/ 7;
+    return weeks == 1 ? "Cada semana" : "Cada $weeks semanas";
+  }
+  return days == 1 ? "Cada día" : "Cada $days días";
+}
+
 

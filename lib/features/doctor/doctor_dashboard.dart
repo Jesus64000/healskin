@@ -1,10 +1,15 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/services/notification_service.dart';
 import '../auth/auth_provider.dart';
 import '../auth/login_screen.dart';
+import '../chat/chat_notification_listener.dart';
+import '../chat/chat_view.dart';
+import '../chat/chat_inbox_screen.dart';
 
 // IMPORTACIONES DE LAS 3 PESTAÑAS (Asegúrate de tener estos archivos o crearlos luego)
 import 'doctor_patients_view.dart';
@@ -56,27 +61,49 @@ final doctorKpiProvider = FutureProvider.autoDispose<Map<String, int>>((ref) asy
 
   if (doctorId == null) return {'totalPatients': 0, 'consultationsToday': 0};
 
-  // 🔒 PRIVACIDAD: Pacientes únicos con citas agendadas con este doctor
+  // 🔒 PRIVACIDAD: Pacientes únicos con citas agendadas con este doctor (excluyendo auto-bloqueos)
   final appointmentsResponse = await supabase
       .from('appointments')
       .select('patient_id')
-      .eq('doctor_id', doctorId);
+      .eq('doctor_id', doctorId)
+      .neq('patient_id', doctorId); // 🔒 EXCLUDE AUTO-BLOCKS
 
   final List<dynamic> appts = appointmentsResponse as List<dynamic>;
   final uniquePatientIds = appts
       .map((item) => (item['patient_id'] ?? '').toString())
-      .where((id) => id.isNotEmpty)
+      .where((id) => id.isNotEmpty && id != doctorId)
       .toSet();
 
-  // Citas activas programadas
+  int totalPatients = 0;
+  if (uniquePatientIds.isNotEmpty) {
+    try {
+      final profilesRes = await supabase
+          .from('profiles')
+          .select('id')
+          .inFilter('id', uniquePatientIds.toList());
+      totalPatients = (profilesRes as List).length;
+    } catch (e) {
+      debugPrint("Error al verificar perfiles de pacientes en KPI: $e");
+      totalPatients = uniquePatientIds.length;
+    }
+  }
+
+  // Citas activas programadas PARA HOY (excluyendo auto-bloqueos)
+  final now = DateTime.now();
+  final startOfToday = DateTime(now.year, now.month, now.day).toIso8601String();
+  final endOfToday = DateTime(now.year, now.month, now.day, 23, 59, 59).toIso8601String();
+
   final appointmentsRes = await supabase
       .from('appointments')
       .select('id')
       .eq('doctor_id', doctorId)
-      .eq('status', 'scheduled');
+      .neq('patient_id', doctorId) // 🔒 EXCLUDE AUTO-BLOCKS
+      .eq('status', 'scheduled')
+      .gte('appointment_date', startOfToday)
+      .lte('appointment_date', endOfToday);
 
   return {
-    'totalPatients': uniquePatientIds.length,
+    'totalPatients': totalPatients,
     'consultationsToday': appointmentsRes.length,
   };
 });
@@ -94,6 +121,7 @@ final todayAgendaPreviewProvider = FutureProvider.autoDispose<List<Map<String, d
       .from('appointments')
       .select('*, patient:profiles!patient_id(full_name)')
       .eq('doctor_id', doctorId)
+      .neq('patient_id', doctorId) // 🔒 EXCLUDE AUTO-BLOCKS
       .eq('status', 'scheduled')
       .gte('appointment_date', nowIso) // Solo citas futuras o a partir de hoy!
       .order('appointment_date', ascending: true)
@@ -106,30 +134,66 @@ final todayAgendaPreviewProvider = FutureProvider.autoDispose<List<Map<String, d
 // 📱 CAPA DE PRESENTACIÓN (UI)
 // ============================================================================
 
-class DoctorDashboard extends StatefulWidget {
+final doctorTabProvider = StateProvider<int>((ref) => 0);
+
+class DoctorDashboard extends ConsumerStatefulWidget {
   const DoctorDashboard({super.key});
 
   @override
-  State<DoctorDashboard> createState() => _DoctorDashboardState();
+  ConsumerState<DoctorDashboard> createState() => _DoctorDashboardState();
 }
 
-class _DoctorDashboardState extends State<DoctorDashboard> {
-  int _currentIndex = 0;
+class _DoctorDashboardState extends ConsumerState<DoctorDashboard> {
+  StreamSubscription? _notificationSubscription;
 
-  final List<Widget> _screens = [
-    const _DoctorHomeTab(),
-    const DoctorPatientsView(),
-    const DoctorAgendaView(),
-    const DoctorProfileView(),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    // Iniciar escucha de chat en tiempo real para el doctor
+    ChatNotificationListener().startListening();
+
+    // Escuchar notificaciones clickeadas
+    _notificationSubscription = NotificationService.selectNotificationStream.stream.listen((payload) {
+      if (payload != null && payload.startsWith('chat:')) {
+        final parts = payload.substring('chat:'.length).split('|');
+        final otherUserId = parts[0];
+        final otherUserName = parts.length > 1 ? parts[1] : 'Paciente';
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ChatView(
+              otherUserId: otherUserId,
+              otherUserName: otherUserName,
+            ),
+          ),
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _notificationSubscription?.cancel();
+    ChatNotificationListener().stopListening();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final currentIndex = ref.watch(doctorTabProvider);
+
+    final List<Widget> screens = [
+      const _DoctorHomeTab(),
+      const DoctorPatientsView(),
+      const DoctorAgendaView(),
+      const DoctorProfileView(),
+    ];
+
     return Scaffold(
       backgroundColor: AppColors.backgroundLight,
       body: IndexedStack(
-        index: _currentIndex,
-        children: _screens,
+        index: currentIndex,
+        children: screens,
       ),
       bottomNavigationBar: BottomNavigationBar(
         backgroundColor: Colors.white,
@@ -137,8 +201,8 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
         unselectedItemColor: AppColors.textSecondary,
         type: BottomNavigationBarType.fixed,
         elevation: 20,
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
+        currentIndex: currentIndex,
+        onTap: (index) => ref.read(doctorTabProvider.notifier).state = index,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.grid_view_rounded), label: "Panel"),
           BottomNavigationBarItem(icon: Icon(Icons.people_alt_outlined), label: "Pacientes"),
@@ -170,30 +234,40 @@ class _DoctorHomeTab extends ConsumerWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           SliverAppBar(
-            expandedHeight: 80,
             floating: true,
             backgroundColor: AppColors.backgroundLight,
             elevation: 0,
-            flexibleSpace: FlexibleSpaceBar(
-              titlePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-              title: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text("Panel Médico",
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
-                  IconButton(
-                    onPressed: () {
-                      ref.read(authProvider.notifier).logout();
-                      Navigator.of(context).pushAndRemoveUntil(
-                        MaterialPageRoute(builder: (_) => const LoginScreen()),
-                            (route) => false,
-                      );
-                    },
-                    icon: const Icon(Icons.power_settings_new, color: AppColors.danger, size: 24),
-                  ),
-                ],
-              ),
+            automaticallyImplyLeading: false,
+            title: const Text(
+              "Panel Médico",
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
             ),
+            actions: [
+              IconButton(
+                padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                constraints: const BoxConstraints(),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const ChatInboxScreen()),
+                  );
+                },
+                icon: const Icon(Icons.chat_bubble_outline, color: AppColors.primary, size: 24),
+              ),
+              IconButton(
+                padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                constraints: const BoxConstraints(),
+                onPressed: () {
+                  ref.read(authProvider.notifier).logout();
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                        (route) => false,
+                  );
+                },
+                icon: const Icon(Icons.power_settings_new, color: AppColors.danger, size: 24),
+              ),
+              const SizedBox(width: 4),
+            ],
           ),
           SliverToBoxAdapter(
             child: Padding(
@@ -203,6 +277,7 @@ class _DoctorHomeTab extends ConsumerWidget {
                 children: [
                   kpiAsync.when(
                     data: (kpis) => _buildKPIs(
+                      ref,
                       patientsCount: kpis['totalPatients'].toString(),
                       consultationsCount: kpis['consultationsToday'].toString(),
                     ),
@@ -210,6 +285,8 @@ class _DoctorHomeTab extends ConsumerWidget {
                     error: (err, stack) => const Text("Error al cargar KPIs", style: TextStyle(color: AppColors.danger)),
                   ),
 
+                  const SizedBox(height: 15),
+                  _buildChatCard(context),
                   const SizedBox(height: 30),
                   _buildSectionTitle("Alertas Prioritarias IA", isUrgent: true),
                                     alertsAsync.when(
@@ -237,7 +314,9 @@ class _DoctorHomeTab extends ConsumerWidget {
                                         appointmentId: null, // Revisión libre de IA
                                       ),
                                     ),
-                                  );
+                                  ).then((_) {
+                                     ref.invalidate(todayAgendaPreviewProvider);
+                                   });
                                 }
                               },
                             ),
@@ -286,7 +365,9 @@ class _DoctorHomeTab extends ConsumerWidget {
                                         appointmentId: appointmentId,
                                       ),
                                     ),
-                                  );
+                                  ).then((_) {
+                                     ref.invalidate(todayAgendaPreviewProvider);
+                                   });
                                 }
                               },
                             ),
@@ -308,40 +389,110 @@ class _DoctorHomeTab extends ConsumerWidget {
     );
   }
 
+  Widget _buildChatCard(BuildContext context) {
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const ChatInboxScreen()),
+        );
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.black.withValues(alpha: 0.04)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 10,
+              offset: const Offset(0, 5),
+            )
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.chat_bubble_rounded, color: AppColors.primary, size: 28),
+            ),
+            const SizedBox(width: 18),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Bandeja de Consultas (Chat)",
+                    style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    "Responde dudas y mantén contacto con tus pacientes",
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios, color: AppColors.textSecondary, size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
   // --- COMPONENTES ---
 
-  Widget _buildKPIs({required String patientsCount, required String consultationsCount}) {
+  Widget _buildKPIs(WidgetRef ref, {required String patientsCount, required String consultationsCount}) {
     return Row(
       children: [
-        _kpiCard("Pacientes", patientsCount, Icons.people_outline, AppColors.secondary),
+        _kpiCard("Pacientes", patientsCount, Icons.people_outline, AppColors.secondary, onTap: () {
+          ref.read(doctorTabProvider.notifier).state = 1;
+        }),
         const SizedBox(width: 15),
-        _kpiCard("Consultas", consultationsCount, Icons.videocam_outlined, AppColors.primary),
+        _kpiCard("Consultas", consultationsCount, Icons.videocam_outlined, AppColors.primary, onTap: () {
+          ref.read(doctorTabProvider.notifier).state = 2;
+        }),
       ],
     );
   }
 
-  Widget _kpiCard(String title, String value, IconData icon, Color color) {
+  Widget _kpiCard(String title, String value, IconData icon, Color color, {VoidCallback? onTap}) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
           boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10, offset: const Offset(0, 4))],
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: color.withValues(alpha: 0.1), shape: BoxShape.circle),
-              child: Icon(icon, color: color, size: 24),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(20),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(color: color.withValues(alpha: 0.1), shape: BoxShape.circle),
+                    child: Icon(icon, color: color, size: 24),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(value, style: const TextStyle(color: AppColors.textPrimary, fontSize: 26, fontWeight: FontWeight.bold)),
+                  Text(title, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                ],
+              ),
             ),
-            const SizedBox(height: 12),
-            Text(value, style: const TextStyle(color: AppColors.textPrimary, fontSize: 26, fontWeight: FontWeight.bold)),
-            Text(title, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-          ],
+          ),
         ),
       ),
     );

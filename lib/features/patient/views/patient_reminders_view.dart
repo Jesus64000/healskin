@@ -28,6 +28,7 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
   }
 
   Future<void> _loadPreferences() async {
+    bool loadFailed = false;
     try {
       final prefs = await SharedPreferences.getInstance();
       
@@ -89,11 +90,9 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
 
         _isLoadingPrefs = false;
       });
-
-      // 🔔 Sincronizar alarmas y recordatorios en segundo plano
-      await _syncAllNotifications();
     } catch (e) {
       debugPrint("Error loading SharedPreferences: $e");
+      loadFailed = true;
       setState(() {
         _morningRoutine = [
           {'id': 'm1', 'task': 'Limpiador facial suave', 'done': false, 'desc': 'Elimina el exceso de grasa y sudor nocturno'},
@@ -112,6 +111,14 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
         _isLoadingPrefs = false;
       });
     }
+
+    if (!loadFailed) {
+      try {
+        await _syncAllNotifications();
+      } catch (e) {
+        debugPrint("Error running _syncAllNotifications: $e");
+      }
+    }
   }
 
   Future<void> _savePreferences() async {
@@ -129,34 +136,50 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
     final notificationService = NotificationService();
     
     // ☀️ Programar recordatorio de rutina de mañana a las 8:00 AM
-    await notificationService.scheduleDailyRoutineReminder(
-      id: 1001,
-      title: "☀️ Rutina de la Mañana",
-      body: "Es hora de iniciar tu día cuidando tu piel. ¡Completa tu rutina de mañana!",
-      hour: 8,
-      minute: 0,
-    );
+    try {
+      await notificationService.scheduleDailyRoutineReminder(
+        id: 1001,
+        title: "☀️ Rutina de la Mañana",
+        body: "Es hora de iniciar tu día cuidando tu piel. ¡Completa tu rutina de mañana!",
+        hour: 8,
+        minute: 0,
+      );
+    } catch (e) {
+      debugPrint("Error scheduling morning routine: $e");
+    }
 
     // 🌙 Programar recordatorio de rutina de noche a las 8:00 PM
-    await notificationService.scheduleDailyRoutineReminder(
-      id: 1002,
-      title: "🌙 Rutina de la Noche",
-      body: "Termina el día consintiendo tu piel. ¡Completa tu rutina nocturna!",
-      hour: 20,
-      minute: 0,
-    );
+    try {
+      await notificationService.scheduleDailyRoutineReminder(
+        id: 1002,
+        title: "🌙 Rutina de la Noche",
+        body: "Termina el día consintiendo tu piel. ¡Completa tu rutina nocturna!",
+        hour: 20,
+        minute: 0,
+      );
+    } catch (e) {
+      debugPrint("Error scheduling night routine: $e");
+    }
 
     // ⏰ Programar alarmas personalizadas activas
     for (final alarm in _customReminders) {
-      if (alarm['active'] == true) {
-        await notificationService.scheduleMedicationAlarm(
-          alarmId: alarm['id'] as String,
-          title: alarm['title'] as String,
-          note: (alarm['note'] ?? 'Recordatorio programado') as String,
-          timeStr: alarm['time'] as String,
-        );
-      } else {
-        await notificationService.cancelNotification(alarm['id'] as String);
+      try {
+        if (alarm['active'] == true) {
+          final type = alarm['type'] as String? ?? 'specific_time';
+          final value = alarm['value'] as String? ?? (alarm['time'] as String? ?? '12:00 PM');
+
+          await notificationService.scheduleCustomReminder(
+            alarmId: alarm['id'] as String,
+            title: alarm['title'] as String,
+            note: (alarm['note'] ?? 'Recordatorio programado') as String,
+            type: type,
+            value: value,
+          );
+        } else {
+          await notificationService.cancelCustomReminder(alarm['id'] as String);
+        }
+      } catch (e) {
+        debugPrint("Error syncing alarm ${alarm['id']}: $e");
       }
     }
   }
@@ -172,6 +195,9 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
     final TextEditingController titleController = TextEditingController();
     final TextEditingController noteController = TextEditingController();
     TimeOfDay selectedTime = const TimeOfDay(hour: 16, minute: 0);
+    String selectedType = 'specific_time';
+    String selectedPresetValue = 'morning';
+    String selectedIntervalValue = '4';
 
     showModalBottomSheet(
       context: context,
@@ -191,7 +217,7 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text("Agregar Alerta Personalizada", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                    const Text("Agregar Alerta de Cuidado", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
                     const SizedBox(height: 15),
 
                     // Título
@@ -200,7 +226,7 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
                     TextField(
                       controller: titleController,
                       decoration: InputDecoration(
-                        hintText: "Ej. Aplicar gel hidratante, Tomar cápsula...",
+                        hintText: "Ej. Protector Solar, Tomar agua, Crema...",
                         filled: true,
                         fillColor: AppColors.surfaceLight,
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
@@ -214,7 +240,7 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
                     TextField(
                       controller: noteController,
                       decoration: InputDecoration(
-                        hintText: "Ej. Receta del doctor Juan...",
+                        hintText: "Ej. Re-aplicar cada 4 horas en el rostro...",
                         filled: true,
                         fillColor: AppColors.surfaceLight,
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
@@ -222,28 +248,126 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
                     ),
                     const SizedBox(height: 15),
 
-                    // Selector de hora
+                    // Selector de tipo de frecuencia
+                    const Text("Frecuencia del Recordatorio", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textSecondary)),
+                    const SizedBox(height: 8),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text("Hora de la alarma:", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
-                        TextButton.icon(
-                          icon: const Icon(Icons.access_time, color: AppColors.primary),
-                          label: Text(selectedTime.format(context), style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
-                          onPressed: () async {
-                            final TimeOfDay? picked = await showTimePicker(
-                              context: context,
-                              initialTime: selectedTime,
-                            );
-                            if (picked != null) {
-                              setModalState(() {
-                                selectedTime = picked;
-                              });
-                            }
-                          },
+                        Expanded(
+                          child: ChoiceChip(
+                            label: const Text("Hora fija", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                            selected: selectedType == 'specific_time',
+                            selectedColor: AppColors.primary.withValues(alpha: 0.2),
+                            labelStyle: TextStyle(color: selectedType == 'specific_time' ? AppColors.primary : AppColors.textSecondary),
+                            onSelected: (val) {
+                              if (val) setModalState(() => selectedType = 'specific_time');
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ChoiceChip(
+                            label: const Text("Preajuste", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                            selected: selectedType == 'preset',
+                            selectedColor: AppColors.primary.withValues(alpha: 0.2),
+                            labelStyle: TextStyle(color: selectedType == 'preset' ? AppColors.primary : AppColors.textSecondary),
+                            onSelected: (val) {
+                              if (val) setModalState(() => selectedType = 'preset');
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ChoiceChip(
+                            label: const Text("Intervalo", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                            selected: selectedType == 'interval',
+                            selectedColor: AppColors.primary.withValues(alpha: 0.2),
+                            labelStyle: TextStyle(color: selectedType == 'interval' ? AppColors.primary : AppColors.textSecondary),
+                            onSelected: (val) {
+                              if (val) setModalState(() => selectedType = 'interval');
+                            },
+                          ),
                         ),
                       ],
                     ),
+                    const SizedBox(height: 20),
+
+                    // Configuración específica de la frecuencia
+                    if (selectedType == 'specific_time') ...[
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text("Seleccionar hora exacta:", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                          TextButton.icon(
+                            icon: const Icon(Icons.access_time, color: AppColors.primary),
+                            label: Text(selectedTime.format(context), style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
+                            onPressed: () async {
+                              final TimeOfDay? picked = await showTimePicker(
+                                context: context,
+                                initialTime: selectedTime,
+                                builder: (context, child) {
+                                  return MediaQuery(
+                                    data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+                                    child: child!,
+                                  );
+                                },
+                              );
+                              if (picked != null) {
+                                setModalState(() {
+                                  selectedTime = picked;
+                                });
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ] else if (selectedType == 'preset') ...[
+                      DropdownButtonFormField<String>(
+                        value: selectedPresetValue,
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: AppColors.surfaceLight,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'morning', child: Text("Mañana (08:00 AM)")),
+                          DropdownMenuItem(value: 'afternoon', child: Text("Tarde (02:00 PM)")),
+                          DropdownMenuItem(value: 'evening', child: Text("Noche (08:00 PM)")),
+                          DropdownMenuItem(value: 'morning_afternoon', child: Text("Mañana y Tarde")),
+                          DropdownMenuItem(value: 'morning_afternoon_evening', child: Text("Mañana, Tarde y Noche")),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) {
+                            setModalState(() {
+                              selectedPresetValue = val;
+                            });
+                          }
+                        },
+                      ),
+                    ] else if (selectedType == 'interval') ...[
+                      DropdownButtonFormField<String>(
+                        value: selectedIntervalValue,
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: AppColors.surfaceLight,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: '2', child: Text("Cada 2 horas (Horario activo)")),
+                          DropdownMenuItem(value: '4', child: Text("Cada 4 horas (Horario activo)")),
+                          DropdownMenuItem(value: '6', child: Text("Cada 6 horas (Horario activo)")),
+                          DropdownMenuItem(value: '8', child: Text("Cada 8 horas (Horario activo)")),
+                          DropdownMenuItem(value: '12', child: Text("Cada 12 horas (Horario activo)")),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) {
+                            setModalState(() {
+                              selectedIntervalValue = val;
+                            });
+                          }
+                        },
+                      ),
+                    ],
                     const SizedBox(height: 25),
 
                     // Botón Guardar
@@ -265,10 +389,15 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
                             return;
                           }
 
+                          final String alarmValue = selectedType == 'specific_time'
+                              ? "${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}"
+                              : (selectedType == 'preset' ? selectedPresetValue : selectedIntervalValue);
+
                           final Map<String, dynamic> newAlarm = {
                             'id': DateTime.now().millisecondsSinceEpoch.toString(),
                             'title': titleController.text.trim(),
-                            'time': selectedTime.format(context),
+                            'type': selectedType,
+                            'value': alarmValue,
                             'note': noteController.text.trim().isEmpty ? 'Recordatorio programado' : noteController.text.trim(),
                             'active': true,
                           };
@@ -278,12 +407,17 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
                           });
                           _savePreferences(); // 🚀 Guarda en SharedPreferences
 
-                          NotificationService().scheduleMedicationAlarm(
-                            alarmId: newAlarm['id'] as String,
-                            title: newAlarm['title'] as String,
-                            note: newAlarm['note'] as String,
-                            timeStr: newAlarm['time'] as String,
-                          );
+                          try {
+                            NotificationService().scheduleCustomReminder(
+                              alarmId: newAlarm['id'] as String,
+                              title: newAlarm['title'] as String,
+                              note: newAlarm['note'] as String,
+                              type: newAlarm['type'] as String,
+                              value: newAlarm['value'] as String,
+                            );
+                          } catch (e) {
+                            debugPrint("Error scheduling custom alarm: $e");
+                          }
 
                           Navigator.pop(context);
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -388,7 +522,11 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
             // 📅 2. CUENTA REGRESIVA DE CITAS MÉDICAS (SUPABASE REAL-TIME)
             appointmentsAsync.when(
               data: (apts) {
-                final scheduled = apts.where((a) => a['status'] == 'scheduled').toList();
+                final scheduled = apts.where((a) {
+                  if (a['status'] != 'scheduled') return false;
+                  final DateTime aptDate = DateTime.parse(a['appointment_date']).toLocal();
+                  return aptDate.isAfter(DateTime.now());
+                }).toList();
                 if (scheduled.isEmpty) return const SizedBox.shrink();
 
                 // Obtenemos la cita más cercana
@@ -459,7 +597,26 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
             if (_morningRoutine.isEmpty)
               _buildEmptyRoutinePlaceholder(isMorning: true)
             else
-              ..._morningRoutine.map((task) => _buildRoutineTile(task, true)),
+              ReorderableListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                buildDefaultDragHandles: false,
+                itemCount: _morningRoutine.length,
+                onReorder: (oldIndex, newIndex) {
+                  setState(() {
+                    if (newIndex > oldIndex) {
+                      newIndex -= 1;
+                    }
+                    final item = _morningRoutine.removeAt(oldIndex);
+                    _morningRoutine.insert(newIndex, item);
+                  });
+                  _savePreferences();
+                },
+                itemBuilder: (context, index) {
+                  final task = _morningRoutine[index];
+                  return _buildRoutineTile(task, true, index);
+                },
+              ),
             const SizedBox(height: 25),
 
             // 🌙 4. RUTINA DE LA NOCHE
@@ -468,7 +625,26 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
             if (_nightRoutine.isEmpty)
               _buildEmptyRoutinePlaceholder(isMorning: false)
             else
-              ..._nightRoutine.map((task) => _buildRoutineTile(task, false)),
+              ReorderableListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                buildDefaultDragHandles: false,
+                itemCount: _nightRoutine.length,
+                onReorder: (oldIndex, newIndex) {
+                  setState(() {
+                    if (newIndex > oldIndex) {
+                      newIndex -= 1;
+                    }
+                    final item = _nightRoutine.removeAt(oldIndex);
+                    _nightRoutine.insert(newIndex, item);
+                  });
+                  _savePreferences();
+                },
+                itemBuilder: (context, index) {
+                  final task = _nightRoutine[index];
+                  return _buildRoutineTile(task, false, index);
+                },
+              ),
             const SizedBox(height: 25),
 
             // ⏰ 5. ALERTAS PERSONALIZADAS
@@ -530,9 +706,10 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
     );
   }
 
-  Widget _buildRoutineTile(Map<String, dynamic> task, bool isMorning) {
+  Widget _buildRoutineTile(Map<String, dynamic> task, bool isMorning, int index) {
     final bool done = task['done'];
     return AnimatedContainer(
+      key: ValueKey(task['id']),
       duration: const Duration(milliseconds: 250),
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
@@ -540,31 +717,54 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: done ? AppColors.primary.withValues(alpha: 0.15) : Colors.black.withValues(alpha: 0.03)),
       ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        leading: Checkbox(
-          activeColor: AppColors.primary,
-          value: done,
-          onChanged: (val) {
-            setState(() {
-              task['done'] = val;
-            });
-            _savePreferences(); // 🚀 Persiste el progreso de cuidado facial
-          },
-        ),
-        title: Text(
-          task['task'],
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 14,
-            color: done ? AppColors.textSecondary : AppColors.textPrimary,
-            decoration: done ? TextDecoration.lineThrough : null,
-          ),
-        ),
-        subtitle: Text(task['desc'], style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
           children: [
+            ReorderableDragStartListener(
+              index: index,
+              child: const Icon(
+                Icons.drag_indicator,
+                color: AppColors.textSecondary,
+                size: 20,
+              ),
+            ),
+            Checkbox(
+              activeColor: AppColors.primary,
+              value: done,
+              onChanged: (val) {
+                setState(() {
+                  task['done'] = val;
+                });
+                _savePreferences(); // 🚀 Persiste el progreso de cuidado facial
+              },
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    task['task'],
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: done ? AppColors.textSecondary : AppColors.textPrimary,
+                      decoration: done ? TextDecoration.lineThrough : null,
+                    ),
+                  ),
+                  if (task['desc'].toString().isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      task['desc'],
+                      style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
             IconButton(
               icon: const Icon(Icons.edit_outlined, size: 18, color: AppColors.textSecondary),
               onPressed: () => _showAddEditRoutineStepModal(isMorning: isMorning, stepToEdit: task),
@@ -752,6 +952,76 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
     );
   }
 
+  String _getAlarmReadableValue(Map<String, dynamic> alarm) {
+    final type = alarm['type'] as String? ?? 'specific_time';
+    final value = alarm['value'] as String? ?? (alarm['time'] as String? ?? '12:00 PM');
+
+    if (type == 'specific_time') {
+      try {
+        final parts = value.split(':');
+        if (parts.length == 2) {
+          final hour = int.parse(parts[0]);
+          final minute = int.parse(parts[1]);
+          final period = hour >= 12 ? 'PM' : 'AM';
+          final displayHour = hour % 12 == 0 ? 12 : hour % 12;
+          final minStr = minute.toString().padLeft(2, '0');
+          final hrStr = displayHour.toString().padLeft(2, '0');
+          return "$hrStr:$minStr $period";
+        }
+      } catch (_) {}
+      return value;
+    } else if (type == 'preset') {
+      switch (value) {
+        case 'morning': return 'Mañana';
+        case 'afternoon': return 'Tarde';
+        case 'evening': return 'Noche';
+        case 'morning_afternoon': return 'Mañana y Tarde';
+        case 'morning_afternoon_evening': return 'Mañana, Tarde y Noche';
+        default: return 'Preajuste';
+      }
+    } else if (type == 'interval') {
+      return 'Cada $value h';
+    }
+    return value;
+  }
+
+  void _deleteAlarm(Map<String, dynamic> alarm) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text("¿Eliminar recordatorio?", style: TextStyle(fontWeight: FontWeight.bold)),
+          content: const Text("Esta acción quitará de forma permanente este recordatorio de cuidado facial."),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancelar", style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.bold)),
+            ),
+            TextButton(
+              onPressed: () async {
+                setState(() {
+                  _customReminders.removeWhere((e) => e['id'] == alarm['id']);
+                });
+                _savePreferences();
+                try {
+                  await NotificationService().cancelCustomReminder(alarm['id'] as String);
+                } catch (e) {
+                  debugPrint("Error canceling alarm: $e");
+                }
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Recordatorio eliminado"), backgroundColor: AppColors.success, behavior: SnackBarBehavior.floating),
+                );
+              },
+              child: const Text("Eliminar", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildAlarmCard(Map<String, dynamic> alarm) {
     final bool active = alarm['active'];
 
@@ -798,33 +1068,52 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                alarm['time'],
+                _getAlarmReadableValue(alarm),
                 style: TextStyle(
-                  fontSize: 16,
+                  fontSize: 14,
                   fontWeight: FontWeight.bold,
                   color: active ? AppColors.primary : AppColors.textSecondary,
                 ),
               ),
               const SizedBox(height: 2),
-              Switch.adaptive(
-                activeColor: AppColors.primary,
-                value: active,
-                onChanged: (val) async {
-                  setState(() {
-                    alarm['active'] = val;
-                  });
-                  _savePreferences(); // 🚀 Persiste el cambio de estado
-                  if (val) {
-                    await NotificationService().scheduleMedicationAlarm(
-                      alarmId: alarm['id'] as String,
-                      title: alarm['title'] as String,
-                      note: (alarm['note'] ?? 'Recordatorio programado') as String,
-                      timeStr: alarm['time'] as String,
-                    );
-                  } else {
-                    await NotificationService().cancelNotification(alarm['id'] as String);
-                  }
-                },
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 20, color: Colors.redAccent),
+                    onPressed: () => _deleteAlarm(alarm),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                  const SizedBox(width: 8),
+                  Switch.adaptive(
+                    activeColor: AppColors.primary,
+                    value: active,
+                    onChanged: (val) async {
+                      setState(() {
+                        alarm['active'] = val;
+                      });
+                      _savePreferences();
+                      try {
+                        if (val) {
+                          final type = alarm['type'] as String? ?? 'specific_time';
+                          final value = alarm['value'] as String? ?? (alarm['time'] as String? ?? '12:00 PM');
+                          
+                          await NotificationService().scheduleCustomReminder(
+                            alarmId: alarm['id'] as String,
+                            title: alarm['title'] as String,
+                            note: (alarm['note'] ?? 'Recordatorio programado') as String,
+                            type: type,
+                            value: value,
+                          );
+                        } else {
+                          await NotificationService().cancelCustomReminder(alarm['id'] as String);
+                        }
+                      } catch (e) {
+                        debugPrint("Error toggling alarm: $e");
+                      }
+                    },
+                  ),
+                ],
               )
             ],
           )

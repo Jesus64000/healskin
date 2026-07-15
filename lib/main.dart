@@ -4,12 +4,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'core/theme/app_colors.dart';
 import 'features/auth/splash_screen.dart'; // Importante tenerlo aquí
 import 'core/services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Inicializar formateo de fechas localizadas en español
+  await initializeDateFormatting('es_ES', null);
 
   // 1. Carga de variables de entorno
   await dotenv.load(fileName: ".env");

@@ -65,6 +65,7 @@ class _AiScannerViewState extends ConsumerState<AiScannerView> {
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        actionsAlignment: MainAxisAlignment.spaceEvenly,
         title: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -89,43 +90,38 @@ class _AiScannerViewState extends ConsumerState<AiScannerView> {
           textAlign: TextAlign.justify,
         ),
         actions: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context); // Cierra Dialog
-                  if (widget.isPushed) {
-                    Navigator.pop(context); // Retrocedemos si fue a pantalla completa
-                  } else {
-                    ref.read(patientTabProvider.notifier).state = 1; // Cambia a Evolución (Index 1) 🚀
-                  }
-                },
-                child: const Text("Entendido", style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.bold)),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context); // Cierra Dialog
-                  if (widget.isPushed) {
-                    Navigator.pop(context); // Retrocedemos para quitar la pantalla del escáner
-                  } else {
-                    ref.read(patientTabProvider.notifier).state = 1; // Cambia a Evolución en el fondo para UX
-                  }
-                  // Abrimos el chat de IA interactiva de inmediato 🚀
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => PatientAIChatScreen(scanData: scanResult),
-                    ),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context); // Cierra Dialog
+              if (widget.isPushed) {
+                Navigator.pop(context); // Retrocedemos si fue a pantalla completa
+              } else {
+                ref.read(patientTabProvider.notifier).state = 1; // Cambia a Evolución (Index 1) 🚀
+              }
+            },
+            child: const Text("Entendido", style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.bold)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context); // Cierra Dialog
+              if (widget.isPushed) {
+                Navigator.pop(context); // Retrocedemos para quitar la pantalla del escáner
+              } else {
+                ref.read(patientTabProvider.notifier).state = 1; // Cambia a Evolución en el fondo para UX
+              }
+              // Abrimos el chat de IA interactiva de inmediato 🚀
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => PatientAIChatScreen(scanData: scanResult),
                 ),
-                child: const Text("Preguntar a IA", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              ),
-            ],
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text("Preguntar a IA", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -155,83 +151,86 @@ class _AiScannerViewState extends ConsumerState<AiScannerView> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        centerTitle: true,
         automaticallyImplyLeading: widget.isPushed, // Desactiva la flecha implícita si es tab 🚀
         iconTheme: const IconThemeData(color: AppColors.textPrimary),
         title: const Text("Escáner de Piel IA", style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold)),
       ),
       body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                height: 380,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceLight,
-                  borderRadius: BorderRadius.circular(30),
-                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.2), width: 2),
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  height: 320,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceLight,
+                    borderRadius: BorderRadius.circular(30),
+                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.2), width: 2),
+                  ),
+                  clipBehavior: Clip.hardEdge,
+                  child: _image == null
+                      ? _buildPlaceholder()
+                      : _buildScanningImage(isScanning),
                 ),
-                clipBehavior: Clip.hardEdge,
-                child: _image == null
-                    ? _buildPlaceholder()
-                    : _buildScanningImage(isScanning),
-              ),
-              const SizedBox(height: 40),
-
-              Text(
-                isScanning ? "Analizando patrones dérmicos con IA en la nube..." : "Captura o sube una foto de tu piel",
-                style: const TextStyle(fontSize: 16, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 30),
-
-              if (!isScanning)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: _takePhoto,
-                        icon: const Icon(Icons.camera_alt, color: Colors.white),
-                        label: const Text("Cámara", style: TextStyle(fontSize: 15, color: Colors.white, fontWeight: FontWeight.bold)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                          elevation: 3,
+                const SizedBox(height: 20),
+  
+                Text(
+                  isScanning ? "Analizando patrones dérmicos con IA en la nube..." : "Captura o sube una foto de tu piel",
+                  style: const TextStyle(fontSize: 16, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 20),
+  
+                if (!isScanning)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _takePhoto,
+                          icon: const Icon(Icons.camera_alt, color: Colors.white),
+                          label: const Text("Cámara", style: TextStyle(fontSize: 15, color: Colors.white, fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                            elevation: 3,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: _selectFromGallery,
-                        icon: const Icon(Icons.photo_library, color: AppColors.primary),
-                        label: const Text("Galería", style: TextStyle(fontSize: 15, color: AppColors.primary, fontWeight: FontWeight.bold)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: AppColors.primary,
-                          side: const BorderSide(color: AppColors.primary, width: 2),
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                          elevation: 1,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _selectFromGallery,
+                          icon: const Icon(Icons.photo_library, color: AppColors.primary),
+                          label: const Text("Galería", style: TextStyle(fontSize: 15, color: AppColors.primary, fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: AppColors.primary,
+                            side: const BorderSide(color: AppColors.primary, width: 2),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                            elevation: 1,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-
-              if (isScanning)
-                const Column(
-                  children: [
-                    CircularProgressIndicator(color: AppColors.primary),
-                    SizedBox(height: 10),
-                    Text("Conectando con servidor seguro...", style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
-                  ],
-                ),
-            ],
+                    ],
+                  ),
+  
+                if (isScanning)
+                  const Column(
+                    children: [
+                      CircularProgressIndicator(color: AppColors.primary),
+                      SizedBox(height: 10),
+                      Text("Conectando con servidor seguro...", style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+                    ],
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -270,7 +269,7 @@ class _AiScannerViewState extends ConsumerState<AiScannerView> {
 
   Widget _buildLaserAnimation() {
     return TweenAnimationBuilder(
-      tween: Tween<double>(begin: 0, end: 380),
+      tween: Tween<double>(begin: 0, end: 320),
       duration: const Duration(seconds: 2),
       builder: (context, double value, child) {
         return Positioned(

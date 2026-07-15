@@ -12,12 +12,16 @@ void main() async {
 
   final supabase = Supabase.instance.client;
   try {
-    final response = await supabase.from('articles').select().limit(1);
-    if (response.isNotEmpty) {
-      print("ARTICLE KEYS: ${response.first.keys}");
-      print("ARTICLE DATA: ${response.first}");
-    } else {
-      print("No articles found in table, but connection succeeded.");
+    print('\n--- Querying profiles ---');
+    final profiles = await supabase.from('profiles').select('id, full_name, role');
+    for (var p in profiles) {
+      print('Profile: ID=${p['id']}, Name=${p['full_name']}, Role=${p['role']}');
+    }
+    
+    print('\n--- Querying appointments ---');
+    final appts = await supabase.from('appointments').select('*');
+    for (var a in appts) {
+      print('Appointment: ID=${a['id']}, Doctor=${a['doctor_id']}, Patient=${a['patient_id']}, Status=${a['status']}, Date=${a['appointment_date']}, Reason=${a['reason']}');
     }
   } catch (e) {
     print("Error querying database: $e");

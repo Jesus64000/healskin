@@ -5,6 +5,7 @@ import 'onboarding_screen.dart';
 import 'auth_provider.dart';
 import 'initial_quiz_screen.dart';
 import 'login_screen.dart';
+import 'complete_profile_screen.dart'; // 🚀 NUEVO IMPORT
 import '../doctor/doctor_dashboard.dart';
 import '../doctor/doctor_setup_screen.dart';
 import '../doctor/doctor_pending_approval_screen.dart';
@@ -66,7 +67,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
     if (authState.isPasswordRecovery) {
       nextScreen = const LoginScreen();
     } else if (authState.session != null) {
-      if (authState.role == UserRole.admin) {
+      if (authState.isProfileIncomplete) {
+        nextScreen = const CompleteProfileScreen();
+      } else if (authState.role == UserRole.admin) {
         nextScreen = const AdminDashboard();
       } else if (authState.role == UserRole.doctor) {
         if (!authState.hasCompletedSetup) {

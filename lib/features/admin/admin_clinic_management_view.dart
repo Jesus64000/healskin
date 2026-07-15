@@ -210,9 +210,13 @@ class _AdminClinicManagementViewState extends ConsumerState<AdminClinicManagemen
                                 const SizedBox(width: 8),
                                 const Icon(Icons.location_on_outlined, size: 12, color: AppColors.textSecondary),
                                 const SizedBox(width: 2),
-                                Text(
-                                  "${clinic['lat']?.toString() ?? '0'}, ${clinic['lng']?.toString() ?? '0'}",
-                                  style: const TextStyle(fontSize: 10, color: AppColors.textSecondary),
+                                Expanded(
+                                  child: Text(
+                                    "${clinic['lat'] != null ? (clinic['lat'] as num).toStringAsFixed(4) : '0'}, ${clinic['lng'] != null ? (clinic['lng'] as num).toStringAsFixed(4) : '0'}",
+                                    style: const TextStyle(fontSize: 10, color: AppColors.textSecondary),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
                               ],
                             ),

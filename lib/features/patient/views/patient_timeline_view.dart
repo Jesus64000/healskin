@@ -3,10 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../auth/profile_provider.dart';
-import '../../ai_scanner/views/ai_scanner_view.dart';
 import '../../ai_scanner/views/patient_ai_chat_screen.dart'; // 🚀 NUEVO IMPORT PARA EL CHAT DIRECTO
 import '../patient_dashboard.dart';
 import 'skin_comparator_view.dart';
+import 'patient_appointments_view.dart';
+import '../../../core/utils/image_utils.dart';
 
 class PatientTimelineView extends ConsumerWidget {
   const PatientTimelineView({super.key});
@@ -82,16 +83,13 @@ class PatientTimelineView extends ConsumerWidget {
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             const SliverAppBar(
-              expandedHeight: 80,
               floating: true,
               backgroundColor: AppColors.backgroundLight,
               elevation: 0,
-              flexibleSpace: FlexibleSpaceBar(
-                titlePadding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                title: Text(
-                    "Tu Evolución",
-                    style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary, fontSize: 18)
-                ),
+              centerTitle: true,
+              title: Text(
+                  "Tu Evolución",
+                  style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary, fontSize: 18)
               ),
             ),
 
@@ -101,7 +99,7 @@ class PatientTimelineView extends ConsumerWidget {
                 child: timelineAsync.when(
                   data: (events) {
                     if (events.isEmpty) {
-                      return _buildEmptyState(context);
+                      return _buildEmptyState(context, ref);
                     }
 
                     return Column(
@@ -132,11 +130,12 @@ class PatientTimelineView extends ConsumerWidget {
                           if (event['created_at'] != null) {
                             final DateTime utcDate = DateTime.parse(event['created_at']);
                             final DateTime localDate = utcDate.toLocal();
-                            dateLabel = DateFormat('dd MMM, yyyy - hh:mm a').format(localDate);
+                            dateLabel = DateFormat('dd MMM, yyyy - hh:mm a', 'es').format(localDate);
                           }
 
                           return _buildTimelineItem(
                             context: context,
+                            ref: ref,
                             date: dateLabel,
                             title: event['title'] ?? 'Análisis Guardado',
                             desc: event['description'] ?? 'Sin detalles adicionales.',
@@ -176,7 +175,7 @@ class PatientTimelineView extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: statusColor.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: statusColor.withValues(alpha: 0.15), width: 1.5),
         boxShadow: [
@@ -288,7 +287,7 @@ class PatientTimelineView extends ConsumerWidget {
     );
   }
 
-  Widget _buildEmptyState(BuildContext context) {
+  Widget _buildEmptyState(BuildContext context, WidgetRef ref) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 60),
       width: double.infinity,
@@ -309,7 +308,7 @@ class PatientTimelineView extends ConsumerWidget {
           ),
           const SizedBox(height: 30),
           ElevatedButton.icon(
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AiScannerView())),
+            onPressed: () => ref.read(patientTabProvider.notifier).state = 4, // Cambiar a pestaña de IA (Index 4) 🚀
             icon: const Icon(Icons.camera_alt, color: Colors.white),
             label: const Text("Escanear ahora", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             style: ElevatedButton.styleFrom(
@@ -325,6 +324,7 @@ class PatientTimelineView extends ConsumerWidget {
 
   Widget _buildTimelineItem({
     required BuildContext context,
+    required WidgetRef ref,
     required String date,
     required String title,
     required String desc,
@@ -398,82 +398,110 @@ class PatientTimelineView extends ConsumerWidget {
                   ),
                   const SizedBox(height: 6),
                   _buildRichDescription(desc),
-
                   if (imageUrl != null && imageUrl.isNotEmpty) ...[
                     const SizedBox(height: 15),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.network(
-                        imageUrl,
-                        width: double.infinity,
-                        height: 150,
-                        fit: BoxFit.cover,
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return Container(
-                            height: 150,
-                            color: AppColors.surfaceLight,
-                            child: const Center(
-                              child: CircularProgressIndicator(color: AppColors.primary),
+                    GestureDetector(
+                      onTap: () => showFullScreenImage(context, imageUrl),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.network(
+                          imageUrl,
+                          width: double.infinity,
+                          height: 150,
+                          fit: BoxFit.cover,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return Container(
+                              height: 150,
+                              color: AppColors.surfaceLight,
+                              child: const Center(
+                                child: CircularProgressIndicator(color: AppColors.primary),
+                              ),
+                            );
+                          },
+                          errorBuilder: (context, error, stackTrace) => Container(
+                            height: 100,
+                            color: Colors.grey.shade200,
+                            child: const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                  
+                  // 💬 BOTÓN CONDICIONAL SEGÚN EL TIPO DE HITO (NUEVO)
+                  if (title.startsWith("Diagnóstico Médico:")) ...[
+                    const SizedBox(height: 15),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 42,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          // Cambiamos a la pestaña de Citas (Index 0) reactiva 🚀
+                          ref.read(patientTabProvider.notifier).state = 0;
+                          // Cambiamos a la sub-pestaña "Indicaciones" (Index 2) 🚀
+                          ref.read(citasSubTabProvider.notifier).state = 2;
+                        },
+                        icon: const Icon(Icons.assignment_outlined, size: 16, color: Colors.white),
+                        label: const Text(
+                          "Ver tratamiento y receta",
+                          style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                  ] else ...[
+                    // 💬 BOTÓN PARA ABRIR EL CHAT DE IA DIRECTO DEL ESCANEO CON DATOS DEL HISTORIAL
+                    const SizedBox(height: 15),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 42,
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          // Limpiamos y traducimos descripciones y riesgos
+                          String cleanTitle = title.replaceAll('Análisis IA: ', '').trim();
+                          
+                          // Extraemos risk_level de los metadatos si existe
+                          String extractedRisk = isWarning ? 'high' : 'low';
+                          final regExp = RegExp(r'\[risk_level:\s*([a-zA-Z]+)\]');
+                          final match = regExp.firstMatch(desc);
+                          if (match != null) {
+                            extractedRisk = match.group(1) ?? extractedRisk;
+                          }
+
+                          // Limpiamos los metadatos de la recomendación
+                          final cleanDesc = desc.replaceAll(RegExp(r'\n\n\[risk_level:\s*[a-zA-Z]+\]'), '').trim();
+
+                          final Map<String, dynamic> scanData = {
+                            'ai_diagnosis': cleanTitle,
+                            'risk_level': extractedRisk,
+                            'image_url': imageUrl,
+                            'recommendation': cleanDesc,
+                            'is_from_history': true,
+                          };
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => PatientAIChatScreen(scanData: scanData),
                             ),
                           );
                         },
-                        errorBuilder: (context, error, stackTrace) => Container(
-                          height: 100,
-                          color: Colors.grey.shade200,
-                          child: const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+                        icon: const Icon(Icons.forum_outlined, size: 16, color: AppColors.primary),
+                        label: const Text(
+                          "Consultar a la IA sobre este escaneo",
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: AppColors.primary, width: 1.2),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          backgroundColor: AppColors.primary.withValues(alpha: 0.04),
                         ),
                       ),
-                    )
-                  ],
-                  
-                  // 💬 BOTÓN PARA ABRIR EL CHAT DE IA DIRECTO DEL ESCANEO CON DATOS DEL HISTORIAL
-                  const SizedBox(height: 15),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 42,
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        // Limpiamos y traducimos descripciones y riesgos
-                        String cleanTitle = title.replaceAll('Análisis IA: ', '').trim();
-                        
-                        // Extraemos risk_level de los metadatos si existe
-                        String extractedRisk = isWarning ? 'high' : 'low';
-                        final regExp = RegExp(r'\[risk_level:\s*([a-zA-Z]+)\]');
-                        final match = regExp.firstMatch(desc);
-                        if (match != null) {
-                          extractedRisk = match.group(1) ?? extractedRisk;
-                        }
-
-                        // Limpiamos los metadatos de la recomendación
-                        final cleanDesc = desc.replaceAll(RegExp(r'\n\n\[risk_level:\s*[a-zA-Z]+\]'), '').trim();
-
-                        final Map<String, dynamic> scanData = {
-                          'ai_diagnosis': cleanTitle,
-                          'risk_level': extractedRisk,
-                          'image_url': imageUrl,
-                          'recommendation': cleanDesc,
-                          'is_from_history': true,
-                        };
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => PatientAIChatScreen(scanData: scanData),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.forum_outlined, size: 16, color: AppColors.primary),
-                      label: const Text(
-                        "Consultar a la IA sobre este escaneo",
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: AppColors.primary, width: 1.2),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        backgroundColor: AppColors.primary.withValues(alpha: 0.04),
-                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),

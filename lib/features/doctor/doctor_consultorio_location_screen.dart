@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -15,6 +17,7 @@ class DoctorConsultorioLocationScreen extends ConsumerStatefulWidget {
 
 class _DoctorConsultorioLocationScreenState extends ConsumerState<DoctorConsultorioLocationScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _officeNameController = TextEditingController();
   final _addressController = TextEditingController();
   late final MapController _mapController;
 
@@ -22,9 +25,81 @@ class _DoctorConsultorioLocationScreenState extends ConsumerState<DoctorConsulto
   bool _isLoading = true;
   bool _isSaving = false;
   bool _useRegisteredClinic = false;
+  bool _isSearchingAddress = false;
 
   Map<String, dynamic>? _selectedClinic;
   List<Map<String, dynamic>> _availableClinics = [];
+
+  Future<void> _searchAddress() async {
+    final address = _addressController.text.trim();
+    if (address.isEmpty) return;
+
+    setState(() {
+      _isSearchingAddress = true;
+    });
+
+    try {
+      final client = HttpClient();
+      final url = Uri.parse('https://nominatim.openstreetmap.org/search?q=${Uri.encodeComponent(address)}&format=json&limit=1');
+      final request = await client.getUrl(url);
+      request.headers.add('User-Agent', 'HealSkinApp/1.0 (pazje@testing.com)');
+      final response = await request.close();
+
+      if (response.statusCode == 200) {
+        final responseBody = await response.transform(utf8.decoder).join();
+        final List data = jsonDecode(responseBody);
+        if (data.isNotEmpty) {
+          final double lat = double.parse(data[0]['lat']);
+          final double lng = double.parse(data[0]['lon']);
+          
+          setState(() {
+            _selectedLatLng = LatLng(lat, lng);
+            _addressController.text = data[0]['display_name'] ?? address;
+          });
+          
+          _mapController.move(_selectedLatLng, 15.0);
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("📍 Ubicación localizada en el mapa"),
+                backgroundColor: AppColors.success,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("⚠️ No se encontró la dirección. Intenta ser más específico."),
+                backgroundColor: AppColors.warning,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        }
+      } else {
+        throw Exception("Error de respuesta: ${response.statusCode}");
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error al buscar dirección: $e"),
+            backgroundColor: AppColors.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSearchingAddress = false;
+        });
+      }
+    }
+  }
 
   @override
   void initState() {
@@ -35,6 +110,7 @@ class _DoctorConsultorioLocationScreenState extends ConsumerState<DoctorConsulto
 
   @override
   void dispose() {
+    _officeNameController.dispose();
     _addressController.dispose();
     _mapController.dispose();
     super.dispose();
@@ -65,7 +141,14 @@ class _DoctorConsultorioLocationScreenState extends ConsumerState<DoctorConsulto
 
       if (mounted) {
         setState(() {
-          _availableClinics = List<Map<String, dynamic>>.from(clinicsResponse);
+          _availableClinics = List<Map<String, dynamic>>.from(clinicsResponse).map((item) {
+            final mapped = Map<String, dynamic>.from(item);
+            mapped['lat'] = (mapped['latitude'] as num?)?.toDouble();
+            mapped['lng'] = (mapped['longitude'] as num?)?.toDouble();
+            mapped['status_text'] = mapped['status_text'] ?? '';
+            mapped['is_open'] = true;
+            return mapped;
+          }).toList();
 
           if (profile != null) {
             final String? dbAddress = profile['office_address'];
@@ -73,7 +156,14 @@ class _DoctorConsultorioLocationScreenState extends ConsumerState<DoctorConsulto
             final double? dbLng = (profile['office_lng'] as num?)?.toDouble();
 
             if (dbAddress != null && dbAddress.isNotEmpty) {
-              _addressController.text = dbAddress;
+              final firstComma = dbAddress.indexOf(',');
+              if (firstComma != -1) {
+                _officeNameController.text = dbAddress.substring(0, firstComma).trim();
+                _addressController.text = dbAddress.substring(firstComma + 1).trim();
+              } else {
+                _officeNameController.text = '';
+                _addressController.text = dbAddress;
+              }
             }
             if (dbLat != null && dbLng != null) {
               _selectedLatLng = LatLng(dbLat, dbLng);
@@ -125,9 +215,11 @@ class _DoctorConsultorioLocationScreenState extends ConsumerState<DoctorConsulto
       return;
     }
 
+    final String officeName = _officeNameController.text.trim();
+    final String officeAddr = _addressController.text.trim();
     final String finalAddress = _useRegisteredClinic
-        ? (_selectedClinic?['address'] ?? _addressController.text.trim())
-        : _addressController.text.trim();
+        ? "${_selectedClinic?['name'] ?? ''}, ${_selectedClinic?['address'] ?? ''}"
+        : (officeName.isNotEmpty ? "$officeName, $officeAddr" : officeAddr);
 
     try {
       await supabase.from('profiles').update({
@@ -172,7 +264,10 @@ class _DoctorConsultorioLocationScreenState extends ConsumerState<DoctorConsulto
       final double lat = (clinic['lat'] as num?)?.toDouble() ?? 10.3932;
       final double lng = (clinic['lng'] as num?)?.toDouble() ?? -71.4422;
       _selectedLatLng = LatLng(lat, lng);
-      _addressController.text = clinic['address'] ?? '';
+      final String clinicName = clinic['name'] ?? '';
+      final String clinicAddress = clinic['address'] ?? '';
+      _officeNameController.text = clinicName;
+      _addressController.text = clinicAddress;
     });
     _mapController.move(_selectedLatLng, 15.0);
   }
@@ -279,12 +374,65 @@ class _DoctorConsultorioLocationScreenState extends ConsumerState<DoctorConsulto
                                   ],
                                 ),
                                 child: TextFormField(
-                                  controller: _addressController,
-                                  validator: (val) => val == null || val.isEmpty ? "La dirección/nombre del consultorio es obligatoria" : null,
+                                  controller: _officeNameController,
+                                  validator: (val) => val == null || val.isEmpty ? "El nombre del centro médico u oficina es obligatorio" : null,
+                                  textInputAction: TextInputAction.next,
                                   decoration: InputDecoration(
-                                    labelText: "Dirección o Nombre de Oficina",
-                                    hintText: "Ej. Clínica San Lucas, Consultorio 3B, Cabimas",
+                                    labelText: "Nombre del Centro Médico u Oficina",
+                                    hintText: "Ej. Clínica San Lucas",
+                                    prefixIcon: const Icon(Icons.apartment_outlined, color: AppColors.primary),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                      borderSide: BorderSide(color: Colors.black.withOpacity(0.05)),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                      borderSide: BorderSide(color: Colors.black.withOpacity(0.05)),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                      borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                                    ),
+                                    filled: true,
+                                    fillColor: Colors.white,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.01),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 4),
+                                    )
+                                  ],
+                                ),
+                                child: TextFormField(
+                                  controller: _addressController,
+                                  validator: (val) => val == null || val.isEmpty ? "La dirección del consultorio es obligatoria" : null,
+                                  textInputAction: TextInputAction.search,
+                                  onFieldSubmitted: (val) => _searchAddress(),
+                                  decoration: InputDecoration(
+                                    labelText: "Dirección Completa",
+                                    hintText: "Ej. Consultorio 3B, Calle 5 con Av. 10, Cabimas",
                                     prefixIcon: const Icon(Icons.business_outlined, color: AppColors.primary),
+                                    suffixIcon: _isSearchingAddress
+                                        ? const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: Padding(
+                                              padding: EdgeInsets.all(12.0),
+                                              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                                            ),
+                                          )
+                                        : IconButton(
+                                            icon: const Icon(Icons.search, color: AppColors.primary),
+                                            onPressed: _searchAddress,
+                                          ),
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(16),
                                       borderSide: BorderSide(color: Colors.black.withOpacity(0.05)),
@@ -314,7 +462,7 @@ class _DoctorConsultorioLocationScreenState extends ConsumerState<DoctorConsulto
                                   child: Text(
                                     _useRegisteredClinic
                                         ? "El marcador se ajustará automáticamente a la dirección de la clínica seleccionada."
-                                        : "Toca el mapa a continuación para fijar con precisión las coordenadas de tu consultorio:",
+                                        : "Mueve el mapa a continuación para situar el marcador rojo en la ubicación exacta de tu consultorio:",
                                     style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.4),
                                   ),
                                 ),
@@ -341,13 +489,13 @@ class _DoctorConsultorioLocationScreenState extends ConsumerState<DoctorConsulto
                                     initialZoom: 14.5,
                                     maxZoom: 18.0,
                                     minZoom: 10.0,
-                                    onTap: _useRegisteredClinic
-                                        ? null
-                                        : (tapPosition, point) {
-                                            setState(() {
-                                              _selectedLatLng = point;
-                                            });
-                                          },
+                                    onPositionChanged: (position, hasGesture) {
+                                      if (!_useRegisteredClinic && position.center != null) {
+                                        setState(() {
+                                          _selectedLatLng = position.center!;
+                                        });
+                                      }
+                                    },
                                   ),
                                   children: [
                                     TileLayer(

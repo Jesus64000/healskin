@@ -10,6 +10,7 @@ import '../../auth/profile_provider.dart';
 import '../../auth/initial_quiz_screen.dart';
 import '../../auth/login_screen.dart';
 import 'patient_reminders_view.dart';
+import '../../../core/services/notification_service.dart';
 
 class PatientProfileView extends ConsumerStatefulWidget {
   const PatientProfileView({super.key});
@@ -103,6 +104,8 @@ class _PatientProfileViewState extends ConsumerState<PatientProfileView> {
     required String? gender,
     required String allergies,
     required String medicalHistory,
+    required String treatmentsPast,
+    required String treatmentsCurrent,
   }) async {
     if (newName.trim().isEmpty) return;
     
@@ -118,6 +121,8 @@ class _PatientProfileViewState extends ConsumerState<PatientProfileView> {
         'gender': gender,
         'allergies': allergies.trim(),
         'medical_history': medicalHistory.trim(),
+        'treatments_past': treatmentsPast.trim(),
+        'treatments_current': treatmentsCurrent.trim(),
       }).eq('id', userId);
       
       ref.invalidate(userProfileProvider);
@@ -148,8 +153,21 @@ class _PatientProfileViewState extends ConsumerState<PatientProfileView> {
     final nameController = TextEditingController(text: profile?['full_name'] ?? '');
     final ageController = TextEditingController(text: profile?['age']?.toString() ?? '');
     String? selectedGender = profile?['gender'];
-    final allergiesController = TextEditingController(text: profile?['allergies'] ?? '');
-    final medicalHistoryController = TextEditingController(text: profile?['medical_history'] ?? '');
+
+    final String allergiesVal = profile?['allergies'] ?? '';
+    final String medicalHistoryVal = profile?['medical_history'] ?? '';
+    final String treatmentsPastVal = profile?['treatments_past'] ?? '';
+    final String treatmentsCurrentVal = profile?['treatments_current'] ?? '';
+
+    bool hasAllergies = allergiesVal.isNotEmpty && allergiesVal.toLowerCase() != 'ninguna' && allergiesVal.toLowerCase() != 'ninguno';
+    bool hasMedicalHistory = medicalHistoryVal.isNotEmpty && medicalHistoryVal.toLowerCase() != 'ninguna' && medicalHistoryVal.toLowerCase() != 'ninguno';
+    bool hasTreatmentsPast = treatmentsPastVal.isNotEmpty && treatmentsPastVal.toLowerCase() != 'ninguna' && treatmentsPastVal.toLowerCase() != 'ninguno';
+    bool hasTreatmentsCurrent = treatmentsCurrentVal.isNotEmpty && treatmentsCurrentVal.toLowerCase() != 'ninguna' && treatmentsCurrentVal.toLowerCase() != 'ninguno';
+
+    final allergiesController = TextEditingController(text: hasAllergies ? allergiesVal : '');
+    final medicalHistoryController = TextEditingController(text: hasMedicalHistory ? medicalHistoryVal : '');
+    final treatmentsPastController = TextEditingController(text: hasTreatmentsPast ? treatmentsPastVal : '');
+    final treatmentsCurrentController = TextEditingController(text: hasTreatmentsCurrent ? treatmentsCurrentVal : '');
 
     // Géneros válidos
     final genders = ["Femenino", "Masculino", "Otro", "Prefiero no decirlo"];
@@ -280,40 +298,162 @@ class _PatientProfileViewState extends ConsumerState<PatientProfileView> {
                           ),
                         ],
                       ),
+                      const SizedBox(height: 20),
+
+                      // 4. Alergias Conocidas Switch
+                      Row(
+                        children: [
+                          const Icon(Icons.warning_amber_rounded, color: AppColors.primary, size: 20),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Text(
+                              "¿Sufre de alguna alergia?",
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textPrimary),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Switch.adaptive(
+                            value: hasAllergies,
+                            activeColor: AppColors.primary,
+                            onChanged: (val) {
+                              setModalState(() {
+                                hasAllergies = val;
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                      if (hasAllergies) ...[
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          controller: allergiesController,
+                          maxLines: 2,
+                          style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                          decoration: InputDecoration(
+                            hintText: "Ej. Alergia al níquel, fragancias artificiales...",
+                            fillColor: AppColors.surfaceLight,
+                            filled: true,
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 15),
 
-                      // 4. Alergias Conocidas
-                      const Text("Alergias Conocidas", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textSecondary)),
-                      const SizedBox(height: 5),
-                      TextFormField(
-                        controller: allergiesController,
-                        maxLines: 2,
-                        style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary),
-                        decoration: InputDecoration(
-                          hintText: "Ej. Alergia al níquel, fragancias artificiales...",
-                          prefixIcon: const Icon(Icons.warning_amber_rounded, color: AppColors.primary),
-                          fillColor: AppColors.surfaceLight,
-                          filled: true,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                        ),
+                      // 5. Antecedentes Médicos Switch
+                      Row(
+                        children: [
+                          const Icon(Icons.history_edu_outlined, color: AppColors.primary, size: 20),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Text(
+                              "¿Posee antecedentes médicos?",
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textPrimary),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Switch.adaptive(
+                            value: hasMedicalHistory,
+                            activeColor: AppColors.primary,
+                            onChanged: (val) {
+                              setModalState(() {
+                                hasMedicalHistory = val;
+                              });
+                            },
+                          ),
+                        ],
                       ),
+                      if (hasMedicalHistory) ...[
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          controller: medicalHistoryController,
+                          maxLines: 3,
+                          style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                          decoration: InputDecoration(
+                            hintText: "Ej. Antecedentes familiares de rosácea, dermatitis atópica...",
+                            fillColor: AppColors.surfaceLight,
+                            filled: true,
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 15),
 
-                      // 5. Antecedentes Médicos y Tratamientos
-                      const Text("Antecedentes y Tratamientos", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textSecondary)),
-                      const SizedBox(height: 5),
-                      TextFormField(
-                        controller: medicalHistoryController,
-                        maxLines: 3,
-                        style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary),
-                        decoration: InputDecoration(
-                          hintText: "Ej. Tratamiento previo con ácido salicílico. Antecedentes familiares de rosácea...",
-                          prefixIcon: const Icon(Icons.history_edu_outlined, color: AppColors.primary),
-                          fillColor: AppColors.surfaceLight,
-                          filled: true,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                        ),
+                      // 6. Tratamientos Previos Switch
+                      Row(
+                        children: [
+                          const Icon(Icons.history_outlined, color: AppColors.primary, size: 20),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Text(
+                              "¿Ha recibido tratamientos previos?",
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textPrimary),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Switch.adaptive(
+                            value: hasTreatmentsPast,
+                            activeColor: AppColors.primary,
+                            onChanged: (val) {
+                              setModalState(() {
+                                hasTreatmentsPast = val;
+                              });
+                            },
+                          ),
+                        ],
                       ),
+                      if (hasTreatmentsPast) ...[
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          controller: treatmentsPastController,
+                          maxLines: 2,
+                          style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                          decoration: InputDecoration(
+                            hintText: "Ej. Uso previo de ácido salicílico, láser de CO2...",
+                            fillColor: AppColors.surfaceLight,
+                            filled: true,
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 15),
+
+                      // 7. Tratamientos Actuales Switch
+                      Row(
+                        children: [
+                          const Icon(Icons.medical_services_outlined, color: AppColors.primary, size: 20),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Text(
+                              "¿Realiza algún tratamiento actual?",
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textPrimary),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Switch.adaptive(
+                            value: hasTreatmentsCurrent,
+                            activeColor: AppColors.primary,
+                            onChanged: (val) {
+                              setModalState(() {
+                                hasTreatmentsCurrent = val;
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                      if (hasTreatmentsCurrent) ...[
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          controller: treatmentsCurrentController,
+                          maxLines: 2,
+                          style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                          decoration: InputDecoration(
+                            hintText: "Ej. Uso de protector solar FPS 50, crema de retinol nocturna...",
+                            fillColor: AppColors.surfaceLight,
+                            filled: true,
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 25),
 
                       // Botón Guardar
@@ -335,12 +475,27 @@ class _PatientProfileViewState extends ConsumerState<PatientProfileView> {
                                   setModalState(() => _isSavingName = true);
                                   
                                   final int? age = int.tryParse(ageController.text);
+                                  
+                                  String allergiesToSave = hasAllergies ? allergiesController.text.trim() : "Ninguna";
+                                  if (allergiesToSave.isEmpty) allergiesToSave = "Ninguna";
+
+                                  String medicalHistoryToSave = hasMedicalHistory ? medicalHistoryController.text.trim() : "Ninguno";
+                                  if (medicalHistoryToSave.isEmpty) medicalHistoryToSave = "Ninguno";
+
+                                  String treatmentsPastToSave = hasTreatmentsPast ? treatmentsPastController.text.trim() : "Ninguno";
+                                  if (treatmentsPastToSave.isEmpty) treatmentsPastToSave = "Ninguno";
+
+                                  String treatmentsCurrentToSave = hasTreatmentsCurrent ? treatmentsCurrentController.text.trim() : "Ninguno";
+                                  if (treatmentsCurrentToSave.isEmpty) treatmentsCurrentToSave = "Ninguno";
+
                                   await _updateProfile(
                                     newName: nameController.text,
                                     age: age,
                                     gender: selectedGender,
-                                    allergies: allergiesController.text,
-                                    medicalHistory: medicalHistoryController.text,
+                                    allergies: allergiesToSave,
+                                    medicalHistory: medicalHistoryToSave,
+                                    treatmentsPast: treatmentsPastToSave,
+                                    treatmentsCurrent: treatmentsCurrentToSave,
                                   );
                                   
                                   setModalState(() => _isSavingName = false);
@@ -521,18 +676,14 @@ class _PatientProfileViewState extends ConsumerState<PatientProfileView> {
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             SliverAppBar(
-              expandedHeight: 80,
               floating: true,
               backgroundColor: AppColors.backgroundLight,
               elevation: 0,
-              flexibleSpace: const FlexibleSpaceBar(
-                titlePadding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                title: Text(
-                  "Tu Perfil",
-                  style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary, fontSize: 18)
-                ),
+              centerTitle: false,
+              title: const Text(
+                "Perfil",
+                style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary, fontSize: 18),
               ),
-
             ),
 
             SliverToBoxAdapter(
@@ -630,6 +781,35 @@ class _PatientProfileViewState extends ConsumerState<PatientProfileView> {
                         
                         // Interruptor de Notificaciones Interactivo
                         _buildInteractiveNotificationTile(),
+
+                        _buildSettingsTile(
+                          icon: Icons.notification_important_outlined,
+                          title: "Probar Notificaciones",
+                          subtitle: "Emitir una alerta de prueba en 5 seg.",
+                          iconColor: AppColors.primary,
+                          onTap: () async {
+                            final notificationService = NotificationService();
+                            await notificationService.requestPermissions();
+                            
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text("🔔 Alerta de prueba agendada en 5 segundos. Sal de la app para verla."),
+                                  duration: Duration(seconds: 4),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+
+                            Future.delayed(const Duration(seconds: 5), () async {
+                              await notificationService.showInstantNotification(
+                                id: 9999,
+                                title: "¡Prueba de Notificación Funcional! 🎉",
+                                body: "El canal de comunicación local de HealSkin está operando correctamente en tu dispositivo.",
+                              );
+                            });
+                          },
+                        ),
 
                         _buildSettingsTile(
                           icon: Icons.notifications_active_outlined,

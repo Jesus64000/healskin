@@ -92,27 +92,29 @@ class AdminDoctorApprovalScreen extends ConsumerWidget {
                 final name = doc['full_name'] ?? 'Dr. Desconocido';
                 final license = doc['license_number'] ?? 'Sin Licencia';
                 final date = doc['created_at'] != null
-                    ? DateFormat('dd MMM yyyy, HH:mm').format(DateTime.parse(doc['created_at']).toLocal())
+                    ? DateFormat('dd MMM yyyy, HH:mm', 'es').format(DateTime.parse(doc['created_at']).toLocal())
                     : 'Fecha desc.';
 
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 15),
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.black.withValues(alpha: 0.04)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.01),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      )
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+                return GestureDetector(
+                  onTap: () => _showDoctorDetailSheet(context, controller, doc),
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 15),
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.black.withValues(alpha: 0.04)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.01),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        )
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                       Row(
                         children: [
                           Container(
@@ -241,7 +243,8 @@ class AdminDoctorApprovalScreen extends ConsumerWidget {
                       ),
                     ],
                   ),
-                );
+                ),
+              );
               },
             );
           },
@@ -299,6 +302,147 @@ class AdminDoctorApprovalScreen extends ConsumerWidget {
               }
             },
             child: const Text("Rechazar", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDoctorDetailSheet(BuildContext context, AdminController controller, Map<String, dynamic> doc) {
+    final name = doc['full_name'] ?? 'Dr. Desconocido';
+    final email = doc['email'] ?? 'Sin correo registrado';
+    final identification = doc['identification_id'] ?? 'No especificado';
+    final specialty = doc['specialty'] ?? 'Especialista en Dermatología';
+    final license = doc['license_number'] ?? 'Sin Licencia';
+    final date = doc['created_at'] != null
+        ? DateFormat('dd MMMM yyyy, hh:mm a', 'es').format(DateTime.parse(doc['created_at']).toLocal())
+        : 'Fecha desc.';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.all(24),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                "Ficha de Registro Médico",
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              
+              _buildDetailItem(Icons.person, "Nombre Completo", name),
+              _buildDetailItem(Icons.email, "Correo Electrónico", email),
+              _buildDetailItem(Icons.badge, "Cédula / DNI", identification),
+              _buildDetailItem(Icons.spa, "Especialidad", specialty),
+              _buildDetailItem(Icons.medical_services, "Número de Licencia", license),
+              _buildDetailItem(Icons.calendar_today, "Fecha de Registro", date),
+              
+              const SizedBox(height: 30),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.cancel_outlined, size: 18),
+                      label: const Text("Rechazar", style: TextStyle(fontWeight: FontWeight.bold)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.danger,
+                        side: const BorderSide(color: AppColors.danger, width: 1.5),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _showRejectDialog(context, controller, doc['id'], name);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.check_circle_outline, size: 18),
+                      label: const Text("Aprobar", style: TextStyle(fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.success,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      ),
+                      onPressed: () async {
+                        Navigator.pop(context);
+                        try {
+                          await controller.approveDoctor(doc['id']);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text("🎉 $name ha sido aprobado con éxito"),
+                                backgroundColor: AppColors.success,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text("Error: $e"),
+                                backgroundColor: AppColors.danger,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDetailItem(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: AppColors.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 2),
+                Text(value, style: const TextStyle(fontSize: 14, color: AppColors.textPrimary, fontWeight: FontWeight.w500)),
+              ],
+            ),
           ),
         ],
       ),

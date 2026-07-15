@@ -24,8 +24,8 @@ final chatStreamProvider = StreamProvider.family.autoDispose<List<Map<String, dy
 class ChatController {
   final SupabaseClient supabase = Supabase.instance.client;
 
-  Future<void> sendMessage(String receiverId, String text) async {
-    if (text.trim().isEmpty) return;
+  Future<void> sendMessage(String receiverId, String text, {String? imageUrl}) async {
+    if (text.trim().isEmpty && imageUrl == null) return;
 
     final myId = supabase.auth.currentUser!.id;
 
@@ -34,6 +34,7 @@ class ChatController {
         'sender_id': myId,
         'receiver_id': receiverId,
         'message': text.trim(),
+        'image_url': imageUrl,
       });
     } catch (e) {
       throw Exception("Error al enviar mensaje: $e");
@@ -42,3 +43,8 @@ class ChatController {
 }
 
 final chatControllerProvider = Provider((ref) => ChatController());
+
+final partnerProfileProvider = FutureProvider.family.autoDispose<Map<String, dynamic>?, String>((ref, userId) async {
+  final supabase = Supabase.instance.client;
+  return await supabase.from('profiles').select().eq('id', userId).maybeSingle();
+});

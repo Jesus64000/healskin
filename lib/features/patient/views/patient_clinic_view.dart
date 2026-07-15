@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../auth/profile_provider.dart'; // O el archivo donde pusiste los nuevos providers
 import 'doctor_detail_screen.dart';
@@ -39,16 +40,13 @@ class PatientClinicView extends ConsumerWidget {
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             const SliverAppBar(
-              expandedHeight: 80,
               floating: true,
               backgroundColor: AppColors.backgroundLight,
               elevation: 0,
-              flexibleSpace: FlexibleSpaceBar(
-                titlePadding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                title: Text(
-                    "Red de Guardianes de la Piel",
-                    style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary, fontSize: 18)
-                ),
+              iconTheme: IconThemeData(color: AppColors.textPrimary),
+              title: Text(
+                  "Red de Guardianes de la Piel",
+                  style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary, fontSize: 18)
               ),
             ),
 
@@ -64,16 +62,34 @@ class PatientClinicView extends ConsumerWidget {
                     // --- 🌟 SECCIÓN 1: TU MÉDICO PRINCIPAL ---
                     primaryDoctorAsync.when(
                       data: (primaryDoc) {
-                        if (primaryDoc == null) return const SizedBox.shrink(); // No tiene doctor principal
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                                "Tu Médico de Cabecera",
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                    "Medico de Cabecera",
+                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)
+                                ),
+                                if (primaryDoc != null)
+                                  TextButton.icon(
+                                    icon: const Icon(Icons.swap_horiz, size: 18, color: AppColors.primary),
+                                    label: const Text("Cambiar", style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                                    onPressed: () => _changePrimaryDoctor(context, ref),
+                                    style: TextButton.styleFrom(
+                                      padding: EdgeInsets.zero,
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                  ),
+                              ],
                             ),
                             const SizedBox(height: 15),
-                            _buildPrimaryDoctorCard(context, primaryDoc),
+                            if (primaryDoc != null)
+                              _buildPrimaryDoctorCard(context, primaryDoc)
+                            else
+                              _buildNoPrimaryDoctorCard(context, ref),
                             const SizedBox(height: 30),
                           ],
                         );
@@ -100,8 +116,9 @@ class PatientClinicView extends ConsumerWidget {
                             doctorId: doc['id'] ?? '',
                             name: "Dr. ${doc['full_name'] ?? 'Doctor'}",
                             specialty: doc['specialty'] ?? 'Especialista en Dermatología',
-                            schedule: doc['availability'] ?? 'Consultar horario',
+                            schedule: 'Consultar horario',
                             avatarIcon: _getIconData(doc['avatar_type']),
+                            avatarUrl: doc['avatar_url'],
                           )).toList(),
                         );
                       },
@@ -215,7 +232,17 @@ class PatientClinicView extends ConsumerWidget {
               width: 60,
               height: 60,
               decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-              child: Icon(_getIconData(doc['avatar_type']), color: AppColors.primary, size: 35),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(30),
+                child: doc['avatar_url'] != null && (doc['avatar_url'] as String).isNotEmpty
+                    ? Image.network(
+                        doc['avatar_url'] as String,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            Icon(_getIconData(doc['avatar_type']), color: AppColors.primary, size: 35),
+                      )
+                    : Icon(_getIconData(doc['avatar_type']), color: AppColors.primary, size: 35),
+              ),
             ),
             const SizedBox(width: 15),
             Expanded(
@@ -257,6 +284,7 @@ class PatientClinicView extends ConsumerWidget {
     required String specialty,
     required String schedule,
     required IconData avatarIcon,
+    String? avatarUrl,
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
@@ -289,7 +317,17 @@ class PatientClinicView extends ConsumerWidget {
                   color: AppColors.surfaceLight,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(avatarIcon, color: AppColors.textSecondary, size: 30),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: avatarUrl != null && avatarUrl.isNotEmpty
+                      ? Image.network(
+                          avatarUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              Icon(avatarIcon, color: AppColors.textSecondary, size: 30),
+                        )
+                      : Icon(avatarIcon, color: AppColors.textSecondary, size: 30),
+                ),
               ),
               const SizedBox(width: 15),
               Expanded(
@@ -315,6 +353,157 @@ class PatientClinicView extends ConsumerWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Future<void> _changePrimaryDoctor(BuildContext context, WidgetRef ref) async {
+    final supabase = Supabase.instance.client;
+    final currentUser = supabase.auth.currentUser;
+    if (currentUser == null) return;
+
+    final primaryDocAsync = ref.read(primaryDoctorProvider);
+    final currentPrimaryId = primaryDocAsync.value?['id'];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.backgroundLight,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Consumer(
+          builder: (context, ref, _) {
+            return FutureBuilder<List<Map<String, dynamic>>>(
+              future: supabase.from('profiles').select().eq('role', 'doctor').eq('is_approved', true),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const SizedBox(
+                    height: 250,
+                    child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+                  );
+                }
+                if (snapshot.hasError) {
+                  return SizedBox(
+                    height: 250,
+                    child: Center(child: Text("Error: ${snapshot.error}")),
+                  );
+                }
+                final doctors = snapshot.data ?? [];
+                if (doctors.isEmpty) {
+                  return const SizedBox(
+                    height: 250,
+                    child: Center(child: Text("No hay médicos disponibles")),
+                  );
+                }
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.all(20.0),
+                      child: Text(
+                        "Selecciona tu Médico de Cabecera",
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    Flexible(
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: doctors.length,
+                        itemBuilder: (context, index) {
+                          final doc = doctors[index];
+                          final isCurrent = doc['id'] == currentPrimaryId;
+                          return ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: AppColors.surfaceLight,
+                              backgroundImage: (doc['avatar_url'] != null && (doc['avatar_url'] as String).isNotEmpty)
+                                  ? NetworkImage(doc['avatar_url'] as String)
+                                  : null,
+                              child: (doc['avatar_url'] == null || (doc['avatar_url'] as String).isEmpty)
+                                  ? Icon(_getIconData(doc['avatar_type']), color: AppColors.primary)
+                                  : null,
+                            ),
+                            title: Text("Dr. ${doc['full_name']}"),
+                            subtitle: Text(doc['specialty'] ?? 'Dermatología'),
+                            trailing: isCurrent 
+                              ? const Icon(Icons.check_circle, color: AppColors.success)
+                              : null,
+                            onTap: () async {
+                              Navigator.pop(context);
+                              try {
+                                await supabase.from('profiles').update({
+                                  'primary_doctor_id': doc['id'],
+                                }).eq('id', currentUser.id);
+                                ref.invalidate(primaryDoctorProvider);
+                                ref.invalidate(availableDoctorsProvider);
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text("Tu médico de cabecera ahora es el Dr. ${doc['full_name']}"),
+                                      backgroundColor: AppColors.success,
+                                    ),
+                                  );
+                                }
+                              } catch (e) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text("Error al cambiar médico: $e"),
+                                      backgroundColor: AppColors.danger,
+                                    ),
+                                  );
+                                }
+                              }
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildNoPrimaryDoctorCard(BuildContext context, WidgetRef ref) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceLight,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.medical_information_outlined, size: 40, color: AppColors.textSecondary),
+          const SizedBox(height: 10),
+          const Text(
+            "Aún no tienes un Médico de Cabecera asignado",
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 5),
+          const Text(
+            "Asigna un médico para tener acceso directo a chat y seguimiento personalizado.",
+            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 15),
+          ElevatedButton(
+            onPressed: () => _changePrimaryDoctor(context, ref),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text("Asignar Médico de Cabecera", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
     );
   }

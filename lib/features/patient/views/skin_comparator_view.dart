@@ -143,7 +143,7 @@ class _SkinComparatorSelectionScreenState extends State<SkinComparatorSelectionS
                       final url = item['image_url']!;
 
                       final date = DateTime.parse(item['created_at'] ?? DateTime.now().toIso8601String()).toLocal();
-                      final dateFormatted = DateFormat('dd MMM, yyyy').format(date);
+                      final dateFormatted = DateFormat('dd MMM, yyyy', 'es').format(date);
 
                       return GestureDetector(
                         onTap: () => _toggleSelection(item),

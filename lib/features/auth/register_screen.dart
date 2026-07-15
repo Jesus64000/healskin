@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/validators.dart';
 import 'auth_provider.dart';
 import 'initial_quiz_screen.dart';
 import '../doctor/doctor_setup_screen.dart'; // ✅ Importación conectada
@@ -17,18 +19,21 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
   // Controladores de Texto
   final _nameController = TextEditingController();
+  final _dniController = TextEditingController();
   final _emailController = TextEditingController();
   final _passController = TextEditingController();
   final _confirmPassController = TextEditingController();
 
   // Nodos de Enfoque
   final _nameFocus = FocusNode();
+  final _dniFocus = FocusNode();
   final _emailFocus = FocusNode();
   final _passFocus = FocusNode();
   final _confirmPassFocus = FocusNode();
 
   // Variables de Estado
   String _selectedRole = 'patient';
+  String _dniPrefix = 'V'; // Prefijo de la cédula V/E
   bool _isPassObscured = true;
   bool _isConfirmPassObscured = true;
   bool _acceptedTerms = false;
@@ -36,10 +41,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   @override
   void dispose() {
     _nameController.dispose();
+    _dniController.dispose();
     _emailController.dispose();
     _passController.dispose();
     _confirmPassController.dispose();
     _nameFocus.dispose();
+    _dniFocus.dispose();
     _emailFocus.dispose();
     _passFocus.dispose();
     _confirmPassFocus.dispose();
@@ -69,7 +76,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           _emailController.text,
           _passController.text,
           _nameController.text,
-          _selectedRole
+          _selectedRole,
+          "${_dniPrefix}-${_dniController.text.trim()}"
       );
 
       if (!mounted) return;
@@ -86,6 +94,49 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               MaterialPageRoute(builder: (_) => const DoctorSetupScreen())
           );
         }
+      } else if (errorMsg.contains("confirma tu correo") || errorMsg.contains("verificación")) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            backgroundColor: AppColors.backgroundLight,
+            title: const Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.mark_email_read_outlined, color: AppColors.success, size: 44),
+                SizedBox(height: 12),
+                Text(
+                  "Verificación de Correo",
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: AppColors.textPrimary),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+            content: const Text(
+              "¡Cuenta registrada con éxito!\n\nPor favor, revisa tu bandeja de entrada y confirma tu correo electrónico utilizando el enlace de verificación enviado para activar tu cuenta antes de ingresar.",
+              style: TextStyle(color: AppColors.textSecondary, height: 1.5, fontSize: 14),
+              textAlign: TextAlign.center,
+            ),
+            actionsAlignment: MainAxisAlignment.center,
+            actions: [
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.of(dialogContext).pop(); // Cierra el diálogo
+                  Navigator.of(context).pop(); // Vuelve al login
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  elevation: 2,
+                ),
+                child: const Text("Entendido", style: TextStyle(fontWeight: FontWeight.bold)),
+              )
+            ],
+          ),
+        );
       } else {
         final isDuplicated = errorMsg.toLowerCase().contains("already registered") || 
                              errorMsg.toLowerCase().contains("ya registrado") || 
@@ -149,15 +200,53 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               _buildTextFormField(
                 controller: _nameController,
                 focusNode: _nameFocus,
-                nextFocus: _emailFocus,
-                label: "Nombre Completo",
+                nextFocus: _dniFocus,
+                label: "Nombres y Apellidos Completos",
                 icon: Icons.person_outline,
-                validator: (val) {
-                  if (val == null || val.trim().isEmpty) return "Ingresa tu nombre completo";
-                  if (val.trim().length < 3) return "El nombre debe tener al menos 3 caracteres";
-                  if (RegExp(r'[0-9]').hasMatch(val)) return "El nombre no debe contener números";
-                  return null;
-                },
+                validator: Validators.validateFullName,
+              ),
+              const SizedBox(height: 15),
+
+              _buildTextFormField(
+                controller: _dniController,
+                focusNode: _dniFocus,
+                nextFocus: _emailFocus,
+                label: "Cédula / Documento de Identidad",
+                icon: Icons.badge_outlined,
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(8),
+                ],
+                customPrefixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(width: 12),
+                    const Icon(Icons.badge_outlined, color: AppColors.primary),
+                    const SizedBox(width: 4),
+                    DropdownButton<String>(
+                      value: _dniPrefix,
+                      underline: const SizedBox(),
+                      onChanged: (String? newValue) {
+                        setState(() {
+                          _dniPrefix = newValue!;
+                        });
+                      },
+                      items: <String>['V', 'E'].map<DropdownMenuItem<String>>((String value) {
+                        return DropdownMenuItem<String>(
+                          value: value,
+                          child: Text(value, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(
+                      height: 20,
+                      child: VerticalDivider(width: 1, thickness: 1, color: Colors.grey),
+                    ),
+                    const SizedBox(width: 10),
+                  ],
+                ),
+                validator: Validators.validateDni,
               ),
               const SizedBox(height: 15),
 
@@ -176,6 +265,15 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               ),
               const SizedBox(height: 15),
 
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                child: Text(
+                  "La contraseña debe tener mínimo 6 caracteres, una letra mayúscula, una minúscula y al menos un carácter especial (ej. @, #, \$, etc.).",
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 11, height: 1.3),
+                ),
+              ),
+              const SizedBox(height: 6),
+
               _buildTextFormField(
                 controller: _passController,
                 focusNode: _passFocus,
@@ -184,14 +282,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 icon: Icons.lock_outline,
                 isObscure: _isPassObscured,
                 onToggleVisibility: () => setState(() => _isPassObscured = !_isPassObscured),
-                validator: (val) {
-                  if (val == null || val.isEmpty) return "Ingresa tu contraseña";
-                  if (val.length < 6) return "La contraseña debe tener al menos 6 caracteres";
-                  if (!RegExp(r'[a-zA-Z]').hasMatch(val) || !RegExp(r'[0-9]').hasMatch(val)) {
-                    return "Debe contener al menos una letra y un número";
-                  }
-                  return null;
-                },
+                validator: Validators.validatePassword,
               ),
               const SizedBox(height: 15),
 
@@ -309,6 +400,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     TextInputType keyboardType = TextInputType.text,
     TextInputAction textInputAction = TextInputAction.next,
     String? Function(String?)? validator,
+    List<TextInputFormatter>? inputFormatters,
+    Widget? customPrefixIcon,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -321,13 +414,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         obscureText: isObscure,
         keyboardType: keyboardType,
         textInputAction: textInputAction,
+        inputFormatters: inputFormatters,
         onFieldSubmitted: (_) {
           if (nextFocus != null) FocusScope.of(context).requestFocus(nextFocus);
         },
         validator: validator,
         style: const TextStyle(color: AppColors.textPrimary),
         decoration: InputDecoration(
-          prefixIcon: Icon(icon, color: AppColors.primary),
+          prefixIcon: customPrefixIcon ?? Icon(icon, color: AppColors.primary),
           suffixIcon: onToggleVisibility != null
               ? IconButton(
             icon: Icon(isObscure ? Icons.visibility_off : Icons.visibility, color: AppColors.textSecondary),

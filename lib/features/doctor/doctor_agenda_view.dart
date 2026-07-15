@@ -73,12 +73,31 @@ class DoctorAgendaView extends ConsumerWidget {
       backgroundColor: AppColors.backgroundLight,
       body: CustomScrollView(
         slivers: [
-          const SliverAppBar(
+          SliverAppBar(
             expandedHeight: 80,
             floating: true,
             backgroundColor: AppColors.backgroundLight,
             elevation: 0,
-            flexibleSpace: FlexibleSpaceBar(
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.calendar_month, color: AppColors.primary),
+                tooltip: "Calendario completo",
+                onPressed: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: ref.read(selectedDateProvider),
+                    firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                    lastDate: DateTime.now().add(const Duration(days: 365)),
+                    locale: const Locale('es', 'ES'),
+                  );
+                  if (picked != null) {
+                    ref.read(selectedDateProvider.notifier).state = picked;
+                  }
+                },
+              ),
+              const SizedBox(width: 15),
+            ],
+            flexibleSpace: const FlexibleSpaceBar(
               titlePadding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
               title: Text("Mi Agenda",
                   style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary, fontSize: 18)),
@@ -197,13 +216,35 @@ class DoctorAgendaView extends ConsumerWidget {
     );
   }
 
-  void _showUnlockDialog(BuildContext context, WidgetRef ref, String appointmentId) {
+  void _showUnlockDialog(BuildContext context, WidgetRef ref, String appointmentId, String reason) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("Desbloquear Horario", style: TextStyle(fontWeight: FontWeight.bold)),
-        content: const Text("¿Estás seguro de que deseas eliminar este bloqueo administrativo y liberar el horario?"),
+        title: const Text("Detalle de Bloqueo", style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text("Motivo del bloqueo:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textSecondary)),
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceLight,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.black.withOpacity(0.03)),
+              ),
+              child: Text(
+                reason,
+                style: const TextStyle(fontSize: 14, color: AppColors.textPrimary, height: 1.4),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text("¿Estás seguro de que deseas eliminar este bloqueo administrativo y liberar el horario?"),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -280,7 +321,7 @@ class DoctorAgendaView extends ConsumerWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
           onTap: isBlocked
-              ? () => _showUnlockDialog(context, ref, appointmentId)
+              ? () => _showUnlockDialog(context, ref, appointmentId, reason)
               : () {
                   Navigator.push(
                     context,
@@ -290,7 +331,9 @@ class DoctorAgendaView extends ConsumerWidget {
                           appointmentId: appointmentId
                       ),
                     ),
-                  );
+                  ).then((_) {
+                    ref.invalidate(dailyAppointmentsProvider);
+                  });
                 },
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -301,7 +344,14 @@ class DoctorAgendaView extends ConsumerWidget {
                   children: [
                     Column(
                       children: [
-                        Text(timeFormatted, style: TextStyle(fontWeight: FontWeight.bold, color: isBlocked ? AppColors.textSecondary : AppColors.textPrimary)),
+                        Text(
+                          isBlocked && reason.contains('[Jornada Completa]') ? "Todo el día" : timeFormatted,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: isBlocked ? AppColors.textSecondary : AppColors.textPrimary,
+                            fontSize: isBlocked && reason.contains('[Jornada Completa]') ? 11 : 14,
+                          ),
+                        ),
                         const SizedBox(height: 5),
                         Icon(
                           isBlocked
@@ -321,15 +371,35 @@ class DoctorAgendaView extends ConsumerWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            isBlocked ? "Bloqueo Administrativo" : patientName,
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                              color: isBlocked ? AppColors.textSecondary : AppColors.textPrimary,
+                          if (isBlocked) ...[
+                            const Text(
+                              "Bloqueo",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: AppColors.textSecondary,
+                              ),
                             ),
-                          ),
-                          Text(reason, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            const Text(
+                              "Administrativo",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ] else
+                            Text(
+                              patientName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: AppColors.textPrimary,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          Text(reason, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
                         ],
                       ),
                     ),
@@ -361,15 +431,19 @@ class DoctorAgendaView extends ConsumerWidget {
                     child: ElevatedButton.icon(
                       onPressed: () async {
                         if (!isRoomOpen) {
-                          // Disparamos el update en Supabase
-                          await ref.read(agendaControllerProvider).openVirtualRoom(appointmentId);
-                          // Forzamos la actualización de la lista
-                          ref.invalidate(dailyAppointmentsProvider);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text("Sala virtual abierta. El paciente ya puede entrar."), backgroundColor: AppColors.success)
-                          );
-                        } else {
-                          Navigator.push(
+                          try {
+                            // Disparamos el update en Supabase
+                            await ref.read(agendaControllerProvider).openVirtualRoom(appointmentId);
+                            // Forzamos la actualización de la lista en segundo plano
+                            ref.invalidate(dailyAppointmentsProvider);
+                          } catch (e) {
+                            debugPrint("⚠️ Error al abrir sala virtual: $e");
+                          }
+                        }
+                        
+                        // Navegamos inmediatamente a la sala de videollamada
+                        if (context.mounted) {
+                           Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (context) => TelemedicineRoomScreen(
@@ -379,7 +453,9 @@ class DoctorAgendaView extends ConsumerWidget {
                                 isDoctor: true,
                               ),
                             ),
-                          );
+                          ).then((_) {
+                            ref.invalidate(dailyAppointmentsProvider);
+                          });
                         }
                       },
                       icon: Icon(isRoomOpen ? Icons.video_call : Icons.sensor_door_outlined, color: Colors.white),
@@ -418,12 +494,22 @@ class _BlockHourBottomSheet extends ConsumerStatefulWidget {
 class _BlockHourBottomSheetState extends ConsumerState<_BlockHourBottomSheet> {
   final _reasonController = TextEditingController();
   TimeOfDay _selectedTime = const TimeOfDay(hour: 9, minute: 0);
+  TimeOfDay _selectedEndTime = const TimeOfDay(hour: 10, minute: 0);
+  bool _isAllDay = false;
   bool _isLoading = false;
 
   @override
   void dispose() {
     _reasonController.dispose();
     super.dispose();
+  }
+
+  String _formatTimeOfDay(TimeOfDay time) {
+    final hour = time.hourOfPeriod;
+    final minute = time.minute.toString().padLeft(2, '0');
+    final period = time.period == DayPeriod.am ? 'AM' : 'PM';
+    final hourStr = (hour == 0 ? 12 : hour).toString().padLeft(2, '0');
+    return "$hourStr:$minute $period";
   }
 
   Future<void> _selectTime(BuildContext context) async {
@@ -442,7 +528,10 @@ class _BlockHourBottomSheetState extends ConsumerState<_BlockHourBottomSheet> {
               style: TextButton.styleFrom(foregroundColor: AppColors.primary),
             ),
           ),
-          child: child!,
+          child: MediaQuery(
+            data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+            child: child!,
+          ),
         );
       },
     );
@@ -524,39 +613,115 @@ class _BlockHourBottomSheetState extends ConsumerState<_BlockHourBottomSheet> {
             ),
             const SizedBox(height: 16),
 
-            // Selector de Hora interactivo
-            InkWell(
-              onTap: () => _selectTime(context),
-              borderRadius: BorderRadius.circular(16),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                decoration: BoxDecoration(
-                  color: AppColors.backgroundLight,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.primary.withOpacity(0.1)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.access_time, color: AppColors.primary, size: 20),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text("Hora de Inicio", style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
-                          Text(
-                            _selectedTime.format(context),
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.textPrimary),
-                          ),
-                        ],
+            if (!_isAllDay) ...[
+              // Selector de Hora interactivo (Inicio)
+              InkWell(
+                onTap: () => _selectTime(context),
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: AppColors.backgroundLight,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.primary.withOpacity(0.1)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.access_time, color: AppColors.primary, size: 20),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text("Hora de Inicio", style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+                            Text(
+                              _formatTimeOfDay(_selectedTime),
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.textPrimary),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    const Icon(Icons.arrow_drop_down, color: AppColors.textSecondary),
-                  ],
+                      const Icon(Icons.arrow_drop_down, color: AppColors.textSecondary),
+                    ],
+                  ),
                 ),
               ),
+              const SizedBox(height: 16),
+
+              // Selector de Hora Fin (si no es toda la jornada)
+              InkWell(
+                onTap: () async {
+                  final TimeOfDay? picked = await showTimePicker(
+                    context: context,
+                    initialTime: _selectedEndTime,
+                    builder: (context, child) {
+                      return Theme(
+                        data: Theme.of(context).copyWith(
+                          colorScheme: const ColorScheme.light(
+                            primary: AppColors.primary,
+                            onPrimary: Colors.white,
+                            onSurface: AppColors.textPrimary,
+                          ),
+                        ),
+                        child: MediaQuery(
+                          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+                          child: child!,
+                        ),
+                      );
+                    },
+                  );
+                  if (picked != null) {
+                    setState(() {
+                      _selectedEndTime = picked;
+                    });
+                  }
+                },
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: AppColors.backgroundLight,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.primary.withOpacity(0.1)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.access_time_filled, color: AppColors.primary, size: 20),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text("Hora de Finalización", style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+                            Text(
+                              _formatTimeOfDay(_selectedEndTime),
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.textPrimary),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.arrow_drop_down, color: AppColors.textSecondary),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            // Switch Todo el día
+            SwitchListTile.adaptive(
+              title: const Text("Bloquear toda la jornada", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+              subtitle: const Text("El bloqueo durará todo el día seleccionado", style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+              value: _isAllDay,
+              activeColor: AppColors.primary,
+              contentPadding: EdgeInsets.zero,
+              onChanged: (val) {
+                setState(() {
+                  _isAllDay = val;
+                });
+              },
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
 
             // Campo de texto de Motivo
             Container(
@@ -601,20 +766,66 @@ class _BlockHourBottomSheetState extends ConsumerState<_BlockHourBottomSheet> {
                   if (user == null) return;
 
                   // Crear el DateTime correspondiente a la fecha y hora seleccionada
-                  final blockDateTime = DateTime(
-                    selectedDate.year,
-                    selectedDate.month,
-                    selectedDate.day,
-                    _selectedTime.hour,
-                    _selectedTime.minute,
-                  );
+                  final blockDateTime = _isAllDay
+                      ? DateTime(selectedDate.year, selectedDate.month, selectedDate.day, 0, 0)
+                      : DateTime(
+                          selectedDate.year,
+                          selectedDate.month,
+                          selectedDate.day,
+                          _selectedTime.hour,
+                          _selectedTime.minute,
+                        );
+
+                  final String blockInfo = _isAllDay 
+                      ? "[Jornada Completa]" 
+                      : "[Hasta ${_formatTimeOfDay(_selectedEndTime)}]";
+                  final String finalReason = "Bloqueo $blockInfo: $reason";
+
+                  // Buscar citas conflictivas de pacientes para cancelarlas
+                  final blockStart = blockDateTime;
+                  final blockEnd = _isAllDay
+                      ? DateTime(selectedDate.year, selectedDate.month, selectedDate.day, 23, 59, 59)
+                      : DateTime(
+                          selectedDate.year,
+                          selectedDate.month,
+                          selectedDate.day,
+                          _selectedEndTime.hour,
+                          _selectedEndTime.minute,
+                        );
+
+                  final activeAppointments = await supabase
+                      .from('appointments')
+                      .select('id, appointment_date, patient_id, reason')
+                      .eq('doctor_id', user.id)
+                      .eq('status', 'scheduled');
+
+                  final conflicts = <dynamic>[];
+                  for (final apt in activeAppointments) {
+                    if (apt['patient_id'] == user.id) continue;
+                    final aptDate = DateTime.parse(apt['appointment_date']).toLocal();
+                    if (aptDate.isAfter(blockStart.subtract(const Duration(seconds: 1))) &&
+                        aptDate.isBefore(blockEnd.add(const Duration(seconds: 1)))) {
+                      conflicts.add(apt);
+                    }
+                  }
+
+                  for (final conflict in conflicts) {
+                    final originalReason = conflict['reason'] ?? '';
+                    await supabase
+                        .from('appointments')
+                        .update({
+                          'status': 'cancelled',
+                          'reason': 'Cancelada por bloqueo administrativo: $originalReason',
+                        })
+                        .eq('id', conflict['id']);
+                  }
 
                   await supabase.from('appointments').insert({
                     'patient_id': user.id, // El médico como su propio paciente
                     'doctor_id': user.id,  // Para asociarlo a su agenda
                     'appointment_date': blockDateTime.toUtc().toIso8601String(),
                     'type': 'in_person',  // Valor compatible con la base de datos
-                    'reason': "Bloqueo: $reason",
+                    'reason': finalReason,
                     'status': 'scheduled',
                   });
 

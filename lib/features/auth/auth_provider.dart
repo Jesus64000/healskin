@@ -12,6 +12,7 @@ class HealSkinAuthState {
   final bool isApproved;
   final bool hasCompletedSetup;
   final bool isPasswordRecovery;
+  final bool isProfileIncomplete; // 🚀
 
   HealSkinAuthState({
     this.role = UserRole.none,
@@ -22,6 +23,7 @@ class HealSkinAuthState {
     this.isApproved = true,
     this.hasCompletedSetup = true,
     this.isPasswordRecovery = false,
+    this.isProfileIncomplete = false, // 🚀
   });
 
   HealSkinAuthState copyWith({
@@ -33,6 +35,7 @@ class HealSkinAuthState {
     bool? isApproved,
     bool? hasCompletedSetup,
     bool? isPasswordRecovery,
+    bool? isProfileIncomplete, // 🚀
   }) {
     return HealSkinAuthState(
       role: role ?? this.role,
@@ -43,6 +46,7 @@ class HealSkinAuthState {
       isApproved: isApproved ?? this.isApproved,
       hasCompletedSetup: hasCompletedSetup ?? this.hasCompletedSetup,
       isPasswordRecovery: isPasswordRecovery ?? this.isPasswordRecovery,
+      isProfileIncomplete: isProfileIncomplete ?? this.isProfileIncomplete, // 🚀
     );
   }
 }
@@ -62,24 +66,30 @@ class AuthNotifier extends StateNotifier<HealSkinAuthState> {
       bool hasCompletedQuiz = true;
       bool isApproved = true;
       bool hasCompletedSetup = true;
+      bool isProfileIncomplete = false;
       try {
         final profile = await _supabase
             .from('profiles')
-            .select('role, skin_type, is_approved, specialty, license_number')
+            .select('role, skin_type, is_approved, specialty, license_number, office_address, identification_id')
             .eq('id', initialSession.user.id)
             .single();
         role = _parseRole(profile['role'] ?? 'patient');
+        final String? idId = profile['identification_id'] as String?;
+        isProfileIncomplete = (role != UserRole.admin) && (idId == null || idId.trim().isEmpty);
+        
         if (role == UserRole.patient) {
           hasCompletedQuiz = profile['skin_type'] != null;
         } else if (role == UserRole.doctor) {
           isApproved = profile['is_approved'] ?? false;
           hasCompletedSetup = profile['specialty'] != null &&
               profile['license_number'] != null &&
-              (profile['license_number'] as String).trim().isNotEmpty;
+              (profile['license_number'] as String).trim().isNotEmpty &&
+              profile['office_address'] != null;
         }
       } catch (e) {
         await _ensureProfileExists(initialSession.user);
         role = _parseRole(initialSession.user.userMetadata?['role'] ?? 'patient');
+        isProfileIncomplete = (role != UserRole.admin);
         if (role == UserRole.patient) {
           hasCompletedQuiz = false;
         } else if (role == UserRole.doctor) {
@@ -95,6 +105,7 @@ class AuthNotifier extends StateNotifier<HealSkinAuthState> {
         hasCompletedQuiz: hasCompletedQuiz,
         isApproved: isApproved,
         hasCompletedSetup: hasCompletedSetup,
+        isProfileIncomplete: isProfileIncomplete,
       );
     } else {
       state = HealSkinAuthState(role: UserRole.none, session: null, isInitialized: true, isLoading: false);
@@ -117,24 +128,30 @@ class AuthNotifier extends StateNotifier<HealSkinAuthState> {
         bool hasCompletedQuiz = true;
         bool isApproved = true;
         bool hasCompletedSetup = true;
+        bool isProfileIncomplete = false;
         try {
           final profile = await _supabase
               .from('profiles')
-              .select('role, skin_type, is_approved, specialty, license_number')
+              .select('role, skin_type, is_approved, specialty, license_number, office_address, identification_id')
               .eq('id', session.user.id)
               .single();
           role = _parseRole(profile['role'] ?? 'patient');
+          final String? idId = profile['identification_id'] as String?;
+          isProfileIncomplete = (role != UserRole.admin) && (idId == null || idId.trim().isEmpty);
+          
           if (role == UserRole.patient) {
             hasCompletedQuiz = profile['skin_type'] != null;
           } else if (role == UserRole.doctor) {
             isApproved = profile['is_approved'] ?? false;
             hasCompletedSetup = profile['specialty'] != null &&
                 profile['license_number'] != null &&
-                (profile['license_number'] as String).trim().isNotEmpty;
+                (profile['license_number'] as String).trim().isNotEmpty &&
+                profile['office_address'] != null;
           }
         } catch (e) {
           await _ensureProfileExists(session.user);
           role = _parseRole(session.user.userMetadata?['role'] ?? 'patient');
+          isProfileIncomplete = (role != UserRole.admin);
           if (role == UserRole.patient) {
             hasCompletedQuiz = false;
           } else if (role == UserRole.doctor) {
@@ -150,12 +167,13 @@ class AuthNotifier extends StateNotifier<HealSkinAuthState> {
           hasCompletedQuiz: hasCompletedQuiz,
           isApproved: isApproved,
           hasCompletedSetup: hasCompletedSetup,
+          isProfileIncomplete: isProfileIncomplete,
         );
       }
     });
   }
 
-  Future<String?> signUp(String email, String password, String fullName, String role) async {
+  Future<String?> signUp(String email, String password, String fullName, String role, String identificationId) async {
     state = state.copyWith(isLoading: true);
     try {
       final response = await _supabase.auth.signUp(
@@ -173,6 +191,7 @@ class AuthNotifier extends StateNotifier<HealSkinAuthState> {
           'role': role,
           'is_approved': role == 'doctor' ? false : true, // Los doctores entran bloqueados
           'email': email.trim(),
+          'identification_id': identificationId.trim(),
         });
       }
 
@@ -195,10 +214,18 @@ class AuthNotifier extends StateNotifier<HealSkinAuthState> {
           password: password.trim()
       );
 
+      // 📧 VERIFICACIÓN DE CORREO: Bloquear si no está confirmado
+      final session = response.session;
+      if (session != null && session.user.emailConfirmedAt == null) {
+        await _supabase.auth.signOut();
+        state = HealSkinAuthState(role: UserRole.none, session: null, isInitialized: true, isLoading: false);
+        return "Por favor, confirma tu correo electrónico antes de ingresar. Te hemos enviado un enlace de verificación.";
+      }
+
       // 🧠 VALIDACIÓN ESTRICTA: Leemos de la tabla al hacer login
       final profile = await _supabase
           .from('profiles')
-          .select('role, skin_type, is_approved, specialty, license_number')
+          .select('role, skin_type, is_approved, specialty, license_number, office_address, identification_id')
           .eq('id', response.session!.user.id)
           .single();
 
@@ -213,7 +240,8 @@ class AuthNotifier extends StateNotifier<HealSkinAuthState> {
         isApproved = profile['is_approved'] ?? false;
         hasCompletedSetup = profile['specialty'] != null &&
             profile['license_number'] != null &&
-            (profile['license_number'] as String).trim().isNotEmpty;
+            (profile['license_number'] as String).trim().isNotEmpty &&
+            profile['office_address'] != null;
       }
 
       state = HealSkinAuthState(
@@ -258,6 +286,7 @@ class AuthNotifier extends StateNotifier<HealSkinAuthState> {
         bool hasCompletedQuiz = false;
         bool isApproved = true;
         bool hasCompletedSetup = true;
+        bool isProfileIncomplete = false;
 
         if (profile == null) {
           // Crear perfil nuevo para el usuario de Google
@@ -269,15 +298,20 @@ class AuthNotifier extends StateNotifier<HealSkinAuthState> {
             'is_approved': true,
             'email': session.user.email,
           });
+          isProfileIncomplete = true;
         } else {
           role = _parseRole(profile['role'] ?? 'patient');
+          final String? idId = profile['identification_id'] as String?;
+          isProfileIncomplete = (role != UserRole.admin) && (idId == null || idId.trim().isEmpty);
+          
           if (role == UserRole.patient) {
             hasCompletedQuiz = profile['skin_type'] != null;
           } else if (role == UserRole.doctor) {
             isApproved = profile['is_approved'] ?? false;
             hasCompletedSetup = profile['specialty'] != null &&
                 profile['license_number'] != null &&
-                (profile['license_number'] as String).trim().isNotEmpty;
+                (profile['license_number'] as String).trim().isNotEmpty &&
+                profile['office_address'] != null;
           }
         }
 
@@ -289,6 +323,7 @@ class AuthNotifier extends StateNotifier<HealSkinAuthState> {
           hasCompletedQuiz: hasCompletedQuiz,
           isApproved: isApproved,
           hasCompletedSetup: hasCompletedSetup,
+          isProfileIncomplete: isProfileIncomplete,
         );
       } else {
         state = state.copyWith(isLoading: false);
@@ -303,7 +338,7 @@ class AuthNotifier extends StateNotifier<HealSkinAuthState> {
         );
         final profile = await _supabase
             .from('profiles')
-            .select('role, skin_type, is_approved, specialty, license_number')
+            .select('role, skin_type, is_approved, specialty, license_number, office_address, identification_id')
             .eq('id', response.session!.user.id)
             .single();
 
@@ -370,6 +405,54 @@ class AuthNotifier extends StateNotifier<HealSkinAuthState> {
       });
     } catch (_) {
       // Ignorar fallos de red/desconexión
+    }
+  }
+
+  Future<String?> completeProfile({
+    required String fullName,
+    required UserRole role,
+    required String identificationId,
+    String? specialty,
+    String? licenseNumber,
+  }) async {
+    state = state.copyWith(isLoading: true);
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) throw Exception("Sesión no encontrada");
+
+      final String roleString = role == UserRole.doctor ? 'doctor' : 'patient';
+      
+      final Map<String, dynamic> updates = {
+        'full_name': fullName.trim(),
+        'role': roleString,
+        'identification_id': identificationId.trim(),
+        'is_approved': role == UserRole.doctor ? false : true,
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+
+      if (role == UserRole.doctor) {
+        updates['specialty'] = specialty;
+        updates['license_number'] = licenseNumber?.trim();
+      }
+
+      await _supabase.from('profiles').update(updates).eq('id', user.id);
+
+      state = state.copyWith(
+        role: role,
+        isProfileIncomplete: false,
+        hasCompletedQuiz: false, // Forzar quiz para pacientes
+        isApproved: role == UserRole.doctor ? false : true,
+        hasCompletedSetup: role == UserRole.doctor ? true : false,
+        isLoading: false,
+      );
+
+      return null;
+    } on AuthException catch (e) {
+      state = state.copyWith(isLoading: false);
+      return e.message;
+    } catch (e) {
+      state = state.copyWith(isLoading: false);
+      return e.toString();
     }
   }
 

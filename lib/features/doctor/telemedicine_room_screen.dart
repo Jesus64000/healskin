@@ -86,6 +86,29 @@ class _TelemedicineRoomScreenState extends State<TelemedicineRoomScreen> {
         uid: 0,
       );
       setState(() => _localUserJoined = true);
+
+      // 🚀 NUEVO: Si es el doctor, activamos el flag de "doctor_in_room" en Supabase en cuanto entra a la sala
+      if (widget.isDoctor && widget.appointmentId.isNotEmpty) {
+        try {
+          await Supabase.instance.client
+              .from('appointments')
+              .update({'doctor_in_room': true})
+              .eq('id', widget.appointmentId);
+        } catch (e) {
+          debugPrint("⚠️ Error al activar doctor_in_room: $e");
+        }
+      }
+    } on FunctionException catch (e) {
+      final errorMessage = e.details ?? e.reasonPhrase ?? e.toString();
+      debugPrint("⚠️ ERROR EN TELEMEDICINA IA/RTC (FunctionException): $errorMessage");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error al conectar videoconsulta: $errorMessage"),
+            backgroundColor: AppColors.danger,
+          ),
+        );
+      }
     } catch (e) {
       debugPrint("⚠️ ERROR EN TELEMEDICINA IA/RTC: $e");
       if (mounted) {
@@ -102,7 +125,20 @@ class _TelemedicineRoomScreenState extends State<TelemedicineRoomScreen> {
   @override
   void dispose() {
     _timer?.cancel();
-    _agoraService.leaveChannel();
+    if (widget.isDoctor && widget.appointmentId.isNotEmpty) {
+      // Fire-and-forget para apagar el flag al destruir la pantalla (por ejemplo, al volver atrás)
+      Supabase.instance.client
+          .from('appointments')
+          .update({'doctor_in_room': false})
+          .eq('id', widget.appointmentId)
+          .then((_) => debugPrint("Sala virtual del médico cerrada exitosamente en dispose"))
+          .catchError((e) => debugPrint("Error al cerrar sala en dispose: $e"));
+    }
+    try {
+      _agoraService.leaveChannel();
+    } catch (e) {
+      debugPrint("Error al colgar canal en dispose: $e");
+    }
     super.dispose();
   }
 
@@ -134,15 +170,19 @@ class _TelemedicineRoomScreenState extends State<TelemedicineRoomScreen> {
     await _agoraService.leaveChannel();
     _timer?.cancel();
 
-    // 2. Si es el DOCTOR quien cuelga, cerramos la puerta de la sala en Supabase
-    if (widget.isDoctor && widget.appointmentId.isNotEmpty) {
+    // 2. Cerramos la puerta de la sala y marcamos la cita como completada en Supabase
+    if (widget.appointmentId.isNotEmpty) {
       try {
         await Supabase.instance.client
             .from('appointments')
-            .update({'doctor_in_room': false})
+            .update({
+              'status': 'completed',
+              'doctor_in_room': false,
+            })
             .eq('id', widget.appointmentId);
+        debugPrint("Cita ${widget.appointmentId} marcada como completada exitosamente.");
       } catch (e) {
-        debugPrint("Error al actualizar sala en BD: $e");
+        debugPrint("Error al actualizar cita en BD a completada: $e");
       }
     }
 
@@ -162,14 +202,21 @@ class _TelemedicineRoomScreenState extends State<TelemedicineRoomScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            _buildMainVideoFeed(),
-            _buildPiPVideoFeed(),
-            _buildTopBar(context),
-            _buildBottomControls(),
-          ],
+      body: PopScope(
+        canPop: false,
+        onPopInvoked: (didPop) async {
+          if (didPop) return;
+          await _endCall();
+        },
+        child: SafeArea(
+          child: Stack(
+            children: [
+              _buildMainVideoFeed(),
+              _buildPiPVideoFeed(),
+              _buildTopBar(context),
+              _buildBottomControls(),
+            ],
+          ),
         ),
       ),
     );

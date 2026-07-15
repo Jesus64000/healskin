@@ -3,13 +3,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../auth/profile_provider.dart';
 import '../../auth/initial_quiz_screen.dart';
-import '../../ai_scanner/views/ai_scanner_view.dart';
 import '../patient_dashboard.dart';
 import 'patient_reminders_view.dart';
 import 'patient_profile_view.dart';
 import 'pathologies_catalog_screen.dart';
 import 'skin_profile_detail_screen.dart';
 import 'skincare_products_screen.dart';
+import '../../chat/chat_inbox_screen.dart';
+
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
+import 'dynamic_quiz_screen.dart';
 
 class PatientHomeView extends ConsumerStatefulWidget {
   const PatientHomeView({super.key});
@@ -20,6 +24,29 @@ class PatientHomeView extends ConsumerStatefulWidget {
 
 class _PatientHomeViewState extends ConsumerState<PatientHomeView> {
   final TextEditingController _searchController = TextEditingController();
+  List<Map<String, dynamic>> _customQuizzes = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCustomQuizzes();
+  }
+
+  Future<void> _loadCustomQuizzes() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? quizzesJson = prefs.getString('healskin_quizzes_db');
+      if (quizzesJson != null) {
+        setState(() {
+          _customQuizzes = List<Map<String, dynamic>>.from(
+            (json.decode(quizzesJson) as List).map((item) => Map<String, dynamic>.from(item))
+          );
+        });
+      }
+    } catch (e) {
+      debugPrint("Error loading custom quizzes: $e");
+    }
+  }
 
   @override
   void dispose() {
@@ -54,6 +81,9 @@ class _PatientHomeViewState extends ConsumerState<PatientHomeView> {
           // Datos limpios y dinámicos
           final String userName = profile?['full_name'] ?? "Usuario";
           final String skinType = profile?['skin_type'] ?? "en evaluación";
+          final ageVal = profile?['age'];
+          final genderVal = profile?['gender'];
+          final bool missingDemographics = (ageVal == null || ageVal.toString().trim().isEmpty || genderVal == null || genderVal.toString().trim().isEmpty);
 
           return RefreshIndicator(
             color: AppColors.primary,
@@ -66,77 +96,160 @@ class _PatientHomeViewState extends ConsumerState<PatientHomeView> {
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
                 SliverAppBar(
-                  expandedHeight: 80,
                   floating: true,
                   pinned: false,
                   backgroundColor: AppColors.backgroundLight,
                   elevation: 0,
-                  flexibleSpace: FlexibleSpaceBar(
-                    titlePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    title: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text("Bienvenido", style: TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.normal)),
-                              Text(
-                                userName,
-                                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                  titleSpacing: 20,
+                  automaticallyImplyLeading: false,
+                  title: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text("Bienvenido", style: TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.normal)),
+                            Text(
+                              userName,
+                              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      IconButton(
+                        icon: const Icon(Icons.chat_bubble_outline, color: AppColors.primary, size: 24),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const ChatInboxScreen()),
+                          );
+                        },
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                      const SizedBox(width: 12),
+                      InkWell(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const PatientProfileView()),
+                          );
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: AppColors.primary.withValues(alpha: 0.15), width: 2),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.03),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
+                              )
                             ],
                           ),
+                          child: CircleAvatar(
+                            radius: 18,
+                            backgroundColor: AppColors.primary,
+                            backgroundImage: (profile?['avatar_url'] != null && (profile!['avatar_url'] as String).isNotEmpty)
+                                ? NetworkImage(profile['avatar_url'] as String)
+                                : null,
+                            child: (profile?['avatar_url'] == null || (profile!['avatar_url'] as String).isEmpty)
+                                ? Text(
+                                    userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  )
+                                : null,
+                          ),
                         ),
-                        const SizedBox(width: 10),
-                        InkWell(
+                      ),
+                    ],
+                  ),
+                ),
+
+              if (missingDemographics)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 20.0, right: 20.0, top: 10.0, bottom: 5.0),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [AppColors.warning, Color(0xFFFF9800)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.warning.withValues(alpha: 0.25),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
                           onTap: () {
                             Navigator.push(
                               context,
                               MaterialPageRoute(builder: (_) => const PatientProfileView()),
                             );
                           },
-                          child: Container(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(color: AppColors.primary.withValues(alpha: 0.15), width: 2),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.03),
-                                  blurRadius: 6,
-                                  offset: const Offset(0, 2),
-                                )
-                              ],
-                            ),
-                            child: CircleAvatar(
-                              radius: 18,
-                              backgroundColor: AppColors.primary,
-                              backgroundImage: (profile?['avatar_url'] != null && (profile!['avatar_url'] as String).isNotEmpty)
-                                  ? NetworkImage(profile['avatar_url'] as String)
-                                  : null,
-                              child: (profile?['avatar_url'] == null || (profile!['avatar_url'] as String).isEmpty)
-                                  ? Text(
-                                      userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 14,
+                          borderRadius: BorderRadius.circular(20),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  backgroundColor: Colors.white.withValues(alpha: 0.2),
+                                  child: const Icon(Icons.info_outline, color: Colors.white),
+                                ),
+                                const SizedBox(width: 15),
+                                const Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        "Completa tu perfil demográfico",
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                        ),
                                       ),
-                                    )
-                                  : null,
+                                      SizedBox(height: 3),
+                                      Text(
+                                        "Necesitamos saber tu edad y género para realizar análisis clínicos más precisos.",
+                                        style: TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 11,
+                                          height: 1.3,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const Icon(Icons.chevron_right, color: Colors.white),
+                              ],
                             ),
                           ),
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
 
-                SliverToBoxAdapter(
+              SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
                     child: Builder(
@@ -182,6 +295,8 @@ class _PatientHomeViewState extends ConsumerState<PatientHomeView> {
                               const SizedBox(height: 25),
 
                               _buildRemindersCard(context),
+                              const SizedBox(height: 15),
+                              _buildChatCard(context),
                               const SizedBox(height: 15),
                               _buildMapCard(context),
                               const SizedBox(height: 25),
@@ -563,10 +678,7 @@ class _PatientHomeViewState extends ConsumerState<PatientHomeView> {
   Widget _buildScannerButton(BuildContext context) {
     return InkWell(
       onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const AiScannerView()),
-        );
+        ref.read(patientTabProvider.notifier).state = 4; // Cambiar a pestaña de IA (Index 4) 🚀
       },
       child: Container(
         width: double.infinity,
@@ -652,6 +764,63 @@ class _PatientHomeViewState extends ConsumerState<PatientHomeView> {
                   SizedBox(height: 4),
                   Text(
                     "Ver rutinas diarias y alarmas activas",
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios, color: AppColors.textSecondary, size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChatCard(BuildContext context) {
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const ChatInboxScreen()),
+        );
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.black.withValues(alpha: 0.04)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 10,
+              offset: const Offset(0, 5),
+            )
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.success.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.chat_bubble_rounded, color: AppColors.success, size: 28),
+            ),
+            const SizedBox(width: 18),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Chat de Consultas",
+                    style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    "Consulta directamente a tu médico especialista",
                     style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
                   ),
                 ],
@@ -910,23 +1079,43 @@ class _PatientHomeViewState extends ConsumerState<PatientHomeView> {
   }
 
   Widget _buildCuestionarioList() {
-    return Column(
-      children: [
+    List<Widget> tiles = [
+      _cuestionarioTile(
+          "Tipo de Piel",
+          "Descubre tus necesidades",
+          Icons.assignment_outlined,
+          () => Navigator.push(context, MaterialPageRoute(builder: (_) => const InitialQuizScreen()))
+      ),
+      const SizedBox(height: 10),
+    ];
+
+    for (var quiz in _customQuizzes) {
+      tiles.add(
         _cuestionarioTile(
-            "Tipo de Piel",
-            "Descubre tus necesidades",
-            Icons.assignment_outlined,
-                () => Navigator.push(context, MaterialPageRoute(builder: (_) => const InitialQuizScreen()))
+          quiz['title'] ?? 'Cuestionario',
+          quiz['desc'] ?? 'Evaluación clínica',
+          Icons.quiz_outlined,
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => DynamicQuizScreen(quiz: quiz),
+            ),
+          ).then((_) => _loadCustomQuizzes()),
         ),
-        const SizedBox(height: 10),
-        _cuestionarioTile(
-            "Hábitos Actuales",
-            "Evalúa tu rutina diaria",
-            Icons.fact_check_outlined,
-            _showComingSoon
-        ),
-      ],
+      );
+      tiles.add(const SizedBox(height: 10));
+    }
+
+    tiles.add(
+      _cuestionarioTile(
+          "Hábitos Actuales",
+          "Evalúa tu rutina diaria",
+          Icons.fact_check_outlined,
+          _showComingSoon
+      ),
     );
+
+    return Column(children: tiles);
   }
 
   Widget _cuestionarioTile(String title, String subtitle, IconData icon, VoidCallback onTap) {

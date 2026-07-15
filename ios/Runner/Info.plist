@@ -77,5 +77,9 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Esta aplicación requiere acceso a la cámara para realizar videoconsultas de telemedicina con su dermatólogo y capturar fotos para el escaneo de lesiones en la piel.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Esta aplicación requiere acceso al micrófono para que pueda comunicarse por voz con su dermatólogo durante las videoconsultas.</string>
 </dict>
 </plist>

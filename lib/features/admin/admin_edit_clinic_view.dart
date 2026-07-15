@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -25,6 +26,7 @@ class _AdminEditClinicViewState extends ConsumerState<AdminEditClinicView> {
   late final MapController _miniMapController;
   bool _isOpen = true;
   bool _isSaving = false;
+  bool _isSearchingAddress = false;
 
   File? _imageFile1;
   File? _imageFile2;
@@ -66,8 +68,11 @@ class _AdminEditClinicViewState extends ConsumerState<AdminEditClinicView> {
   void _onCoordsChanged() {
     final double? lat = double.tryParse(_latController.text);
     final double? lng = double.tryParse(_lngController.text);
-    if (lat != null && lng != null) {
-      _miniMapController.move(LatLng(lat, lng), 14.5);
+    if (lat != null && lng != null && _latController.text.length > 5 && _lngController.text.length > 5) {
+      final center = _miniMapController.camera.center;
+      if ((center.latitude - lat).abs() > 0.0001 || (center.longitude - lng).abs() > 0.0001) {
+        _miniMapController.move(LatLng(lat, lng), _miniMapController.camera.zoom);
+      }
     }
   }
 
@@ -76,6 +81,77 @@ class _AdminEditClinicViewState extends ConsumerState<AdminEditClinicView> {
       _latController.text = "10.3932";
       _lngController.text = "-71.4422";
     });
+  }
+
+  Future<void> _searchAddress() async {
+    final address = _addressController.text.trim();
+    if (address.isEmpty) return;
+
+    setState(() {
+      _isSearchingAddress = true;
+    });
+
+    try {
+      final client = HttpClient();
+      final url = Uri.parse('https://nominatim.openstreetmap.org/search?q=${Uri.encodeComponent(address)}&format=json&limit=1');
+      final request = await client.getUrl(url);
+      request.headers.add('User-Agent', 'HealSkinApp/1.0 (pazje@testing.com)');
+      final response = await request.close();
+
+      if (response.statusCode == 200) {
+        final responseBody = await response.transform(utf8.decoder).join();
+        final List data = jsonDecode(responseBody);
+        if (data.isNotEmpty) {
+          final double lat = double.parse(data[0]['lat']);
+          final double lng = double.parse(data[0]['lon']);
+          
+          setState(() {
+            _latController.text = lat.toStringAsFixed(6);
+            _lngController.text = lng.toStringAsFixed(6);
+          });
+          
+          _miniMapController.move(LatLng(lat, lng), 15.0);
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("📍 Ubicación localizada en el mapa"),
+                backgroundColor: AppColors.success,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("⚠️ No se encontró la dirección. Intenta ser más específico."),
+                backgroundColor: AppColors.warning,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        }
+      } else {
+        throw Exception("Error de respuesta: ${response.statusCode}");
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error al buscar dirección: $e"),
+            backgroundColor: AppColors.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSearchingAddress = false;
+        });
+      }
+    }
   }
 
   Future<void> _saveClinic() async {
@@ -204,6 +280,21 @@ class _AdminEditClinicViewState extends ConsumerState<AdminEditClinicView> {
                       hint: "Ej. Av. Intercomunal con Calle Chile, Cabimas",
                       icon: Icons.map,
                       validator: (value) => value == null || value.isEmpty ? "La dirección es obligatoria" : null,
+                      textInputAction: TextInputAction.search,
+                      onFieldSubmitted: (val) => _searchAddress(),
+                      suffixIcon: _isSearchingAddress
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: Padding(
+                                padding: EdgeInsets.all(12.0),
+                                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                              ),
+                            )
+                          : IconButton(
+                              icon: const Icon(Icons.search, color: AppColors.primary),
+                              onPressed: _searchAddress,
+                            ),
                     ),
                     const SizedBox(height: 16),
 
@@ -289,11 +380,14 @@ class _AdminEditClinicViewState extends ConsumerState<AdminEditClinicView> {
                             initialZoom: 14.0,
                             maxZoom: 18.0,
                             minZoom: 10.0,
-                            onTap: (tapPosition, point) {
-                              setState(() {
-                                _latController.text = point.latitude.toStringAsFixed(6);
-                                _lngController.text = point.longitude.toStringAsFixed(6);
-                              });
+                            onPositionChanged: (position, hasGesture) {
+                              final center = position.center;
+                              if (center != null) {
+                                setState(() {
+                                  _latController.text = center.latitude.toStringAsFixed(6);
+                                  _lngController.text = center.longitude.toStringAsFixed(6);
+                                });
+                              }
                             },
                           ),
                           children: [
@@ -407,6 +501,9 @@ class _AdminEditClinicViewState extends ConsumerState<AdminEditClinicView> {
     required IconData icon,
     TextInputType keyboardType = TextInputType.text,
     String? Function(String?)? validator,
+    Widget? suffixIcon,
+    TextInputAction? textInputAction,
+    void Function(String)? onFieldSubmitted,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -424,10 +521,13 @@ class _AdminEditClinicViewState extends ConsumerState<AdminEditClinicView> {
         controller: controller,
         keyboardType: keyboardType,
         validator: validator,
+        textInputAction: textInputAction,
+        onFieldSubmitted: onFieldSubmitted,
         decoration: InputDecoration(
           labelText: label,
           hintText: hint,
           prefixIcon: Icon(icon, color: AppColors.primary.withOpacity(0.6)),
+          suffixIcon: suffixIcon,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
             borderSide: BorderSide(color: Colors.black.withOpacity(0.05)),

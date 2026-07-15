@@ -24,7 +24,7 @@ final patientsDirectoryProvider = FutureProvider.autoDispose<List<Map<String, dy
   final List<dynamic> appts = appointmentsResponse as List<dynamic>;
   final List<String> patientIds = appts
       .map((item) => (item['patient_id'] ?? '').toString())
-      .where((id) => id.isNotEmpty)
+      .where((id) => id.isNotEmpty && id != doctorId)
       .toSet() // Eliminar duplicados
       .toList();
 
@@ -131,10 +131,11 @@ class _DoctorPatientsViewState extends ConsumerState<DoctorPatientsView> {
                       final String fullName = patient['full_name'] ?? 'Desconocido';
                       final String patientId = patient['id'];
                       final String skinType = patient['skin_type'] ?? 'No especificado';
+                      final String? avatarUrl = patient['avatar_url'] as String?;
 
                       final String initials = fullName.trim().isNotEmpty ? fullName.trim()[0].toUpperCase() : 'P';
 
-                      return _patientCard(context, patientId, fullName, skinType, initials);
+                      return _patientCard(context, patientId, fullName, skinType, initials, avatarUrl);
                     },
                     childCount: filteredPatients.length,
                   ),
@@ -158,7 +159,7 @@ class _DoctorPatientsViewState extends ConsumerState<DoctorPatientsView> {
     );
   }
 
-  Widget _patientCard(BuildContext context, String patientId, String name, String skinType, String initials) {
+  Widget _patientCard(BuildContext context, String patientId, String name, String skinType, String initials, String? avatarUrl) {
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
       child: InkWell(
@@ -191,7 +192,12 @@ class _DoctorPatientsViewState extends ConsumerState<DoctorPatientsView> {
               CircleAvatar(
                 radius: 25,
                 backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-                child: Text(initials, style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 18)),
+                backgroundImage: avatarUrl != null && avatarUrl.trim().isNotEmpty
+                    ? NetworkImage(avatarUrl)
+                    : null,
+                child: avatarUrl != null && avatarUrl.trim().isNotEmpty
+                    ? null
+                    : Text(initials, style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 18)),
               ),
               const SizedBox(width: 15),
               Expanded(

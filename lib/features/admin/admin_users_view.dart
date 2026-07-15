@@ -195,14 +195,19 @@ class _AdminUserListScreenState extends ConsumerState<AdminUserListScreen> {
                             backgroundColor: widget.role == 'doctor' 
                                 ? AppColors.secondary.withValues(alpha: 0.1) 
                                 : AppColors.primary.withValues(alpha: 0.1),
-                            child: Text(
-                              avatarInitials.isEmpty ? 'U' : avatarInitials,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: widget.role == 'doctor' ? AppColors.secondary : AppColors.primary,
-                                fontSize: 16,
-                              ),
-                            ),
+                            backgroundImage: (user['avatar_url'] != null && (user['avatar_url'] as String).isNotEmpty)
+                                ? NetworkImage(user['avatar_url'] as String)
+                                : null,
+                            child: (user['avatar_url'] == null || (user['avatar_url'] as String).isEmpty)
+                                ? Text(
+                                    avatarInitials.isEmpty ? 'U' : avatarInitials,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: widget.role == 'doctor' ? AppColors.secondary : AppColors.primary,
+                                      fontSize: 16,
+                                    ),
+                                  )
+                                : null,
                           ),
                           title: Text(
                             name,
@@ -272,7 +277,7 @@ class _AdminUserListScreenState extends ConsumerState<AdminUserListScreen> {
 // ============================================================================
 // 📱 2. PANTALLA DE DETALLE DEL USUARIO (FICHA DE INFORMACIÓN COMPLETA)
 // ============================================================================
-class AdminUserDetailScreen extends StatelessWidget {
+class AdminUserDetailScreen extends ConsumerWidget {
   final Map<String, dynamic> user;
 
   const AdminUserDetailScreen({
@@ -281,7 +286,7 @@ class AdminUserDetailScreen extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final name = user['full_name'] ?? 'Usuario';
     final email = user['email'] ?? 'Sin correo registrado';
     final role = user['role'] ?? 'patient';
@@ -338,14 +343,19 @@ class AdminUserDetailScreen extends StatelessWidget {
                     child: CircleAvatar(
                       radius: 41,
                       backgroundColor: Colors.white,
-                      child: Text(
-                        avatarInitials.isEmpty ? 'U' : avatarInitials,
-                        style: TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.bold,
-                          color: role == 'doctor' ? AppColors.secondary : AppColors.primary,
-                        ),
-                      ),
+                      backgroundImage: (user['avatar_url'] != null && (user['avatar_url'] as String).isNotEmpty)
+                          ? NetworkImage(user['avatar_url'] as String)
+                          : null,
+                      child: (user['avatar_url'] == null || (user['avatar_url'] as String).isEmpty)
+                          ? Text(
+                              avatarInitials.isEmpty ? 'U' : avatarInitials,
+                              style: TextStyle(
+                                fontSize: 26,
+                                fontWeight: FontWeight.bold,
+                                color: role == 'doctor' ? AppColors.secondary : AppColors.primary,
+                              ),
+                            )
+                          : null,
                     ),
                   ),
                   const SizedBox(height: 15),
@@ -414,7 +424,9 @@ class AdminUserDetailScreen extends StatelessWidget {
                           _buildDetailRow(Icons.cake_outlined, "Edad", user['age']?.toString() ?? 'No registrada'),
                           _buildDetailRow(Icons.face_outlined, "Género", user['gender'] ?? 'No especificado'),
                           _buildDetailRow(Icons.warning_amber_rounded, "Alergias Conocidas", user['allergies'] ?? 'Ninguna'),
-                          _buildDetailRow(Icons.history_edu_outlined, "Antecedentes y Tratamientos", user['medical_history'] ?? 'Ninguno'),
+                          _buildDetailRow(Icons.history_edu_outlined, "Antecedentes Médicos", user['medical_history'] ?? 'Ninguno'),
+                          _buildDetailRow(Icons.history_outlined, "Tratamientos Previos", user['treatments_past'] ?? 'Ninguno'),
+                          _buildDetailRow(Icons.medical_services_outlined, "Tratamientos Actuales", user['treatments_current'] ?? 'Ninguno'),
                         ],
                       ),
                     ),
@@ -434,6 +446,20 @@ class AdminUserDetailScreen extends StatelessWidget {
                     ),
                   ],
                   const SizedBox(height: 30),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () => _confirmAndCallDelete(context, ref),
+                      icon: const Icon(Icons.delete_forever, color: Colors.white),
+                      label: const Text("Eliminar Cuenta", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.danger,
+                        padding: const EdgeInsets.symmetric(vertical: 15),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 30),
                 ],
               ),
             ),
@@ -441,6 +467,53 @@ class AdminUserDetailScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _confirmAndCallDelete(BuildContext context, WidgetRef ref) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.backgroundLight,
+        title: const Text("Confirmar Eliminación", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+        content: Text("¿Estás seguro de que deseas eliminar permanentemente a ${user['full_name'] ?? 'este usuario'}? Esta acción no se puede deshacer y eliminará su perfil de la base de datos."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Cancelar", style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("Eliminar", style: TextStyle(color: AppColors.danger, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        final userId = user['id'] ?? '';
+        final userRole = user['role'] ?? 'patient';
+        await ref.read(adminControllerProvider).deleteUser(userId, userRole);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Usuario eliminado correctamente"),
+              backgroundColor: AppColors.success,
+            ),
+          );
+          Navigator.pop(context); // Volver al listado
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Error al eliminar: $e"),
+              backgroundColor: AppColors.danger,
+            ),
+          );
+        }
+      }
+    }
   }
 
   Widget _buildSectionHeader(String title) {

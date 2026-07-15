@@ -23,12 +23,18 @@ final primaryDoctorProvider = FutureProvider.autoDispose<Map<String, dynamic>?>(
 // 2. OBTENER EL RESTO DE DOCTORES (Excluyendo al principal si existe)
 final availableDoctorsProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   final supabase = Supabase.instance.client;
+  final currentUser = supabase.auth.currentUser;
 
   // 🚀 FIX: Leemos el valor del provider de forma segura sincrónicamente
   final primaryDocAsync = ref.watch(primaryDoctorProvider);
   final primaryDocId = primaryDocAsync.value?['id'] as String?;
 
   var query = supabase.from('profiles').select().eq('role', 'doctor').eq('is_approved', true);
+
+  // Excluir al usuario actual si está autenticado
+  if (currentUser != null) {
+    query = query.neq('id', currentUser.id);
+  }
 
   // Si ya tiene doctor principal, lo filtramos
   if (primaryDocId != null) {
@@ -64,7 +70,7 @@ final myAppointmentsProvider = StreamProvider.autoDispose<List<Map<String, dynam
         // 🚀 FIX APLICADO: Solo pedimos 'full_name' para evitar el error de columnas inexistentes
         final doctorData = await supabase
             .from('profiles')
-            .select('full_name')
+            .select('full_name, office_address')
             .eq('id', apt['doctor_id'])
             .single();
 
@@ -86,6 +92,71 @@ final myAppointmentsProvider = StreamProvider.autoDispose<List<Map<String, dynam
 class AppointmentController {
   final SupabaseClient supabase = Supabase.instance.client;
 
+  Future<void> _checkDoctorAvailability(String doctorId, DateTime date, {String? ignoreAppointmentId}) async {
+    final startOfDay = DateTime(date.year, date.month, date.day, 0, 0, 0).toUtc();
+    final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59).toUtc();
+
+    var query = supabase
+        .from('appointments')
+        .select()
+        .eq('doctor_id', doctorId)
+        .eq('status', 'scheduled')
+        .gte('appointment_date', startOfDay.toIso8601String())
+        .lte('appointment_date', endOfDay.toIso8601String());
+
+    if (ignoreAppointmentId != null) {
+      query = query.neq('id', ignoreAppointmentId);
+    }
+
+    final existingApts = await query;
+
+    for (final apt in existingApts) {
+      final String reasonStr = apt['reason'] ?? '';
+      final String patientId = apt['patient_id'] ?? '';
+      final bool isBlocked = patientId == doctorId;
+
+      if (isBlocked) {
+        if (reasonStr.contains('[Jornada Completa]')) {
+          throw Exception("El médico tiene la jornada bloqueada para este día. Por favor elige otra fecha.");
+        }
+        if (reasonStr.contains('[Hasta ')) {
+          final startIdx = reasonStr.indexOf('[Hasta ') + 7;
+          final endIdx = reasonStr.indexOf(']', startIdx);
+          if (endIdx != -1) {
+            final timeStr = reasonStr.substring(startIdx, endIdx); // "04:00 PM"
+            final parts = timeStr.split(' ');
+            if (parts.length == 2) {
+              final hm = parts[0].split(':');
+              if (hm.length == 2) {
+                int hour = int.parse(hm[0]);
+                final minute = int.parse(hm[1]);
+                final ampm = parts[1].toUpperCase();
+                if (ampm == 'PM' && hour < 12) hour += 12;
+                if (ampm == 'AM' && hour == 12) hour = 0;
+
+                final blockStart = DateTime.parse(apt['appointment_date']).toLocal();
+                final blockEnd = DateTime(blockStart.year, blockStart.month, blockStart.day, hour, minute);
+
+                final localSelected = date.toLocal();
+                if (localSelected.isAfter(blockStart.subtract(const Duration(seconds: 1))) &&
+                    localSelected.isBefore(blockEnd.add(const Duration(seconds: 1)))) {
+                  throw Exception("El horario seleccionado está bloqueado administrativamente por el médico (${timeStr}). Por favor elige otra hora.");
+                }
+              }
+            }
+          }
+        }
+      } else {
+        // Cita normal de otro paciente
+        final aptTime = DateTime.parse(apt['appointment_date']).toLocal();
+        final difference = date.toLocal().difference(aptTime).inMinutes.abs();
+        if (difference < 30) {
+          throw Exception("Este horario ya está reservado por otro paciente. Por favor elige otra hora.");
+        }
+      }
+    }
+  }
+
   Future<void> bookAppointment({
     required String doctorId,
     required DateTime date,
@@ -95,6 +166,8 @@ class AppointmentController {
     final userId = supabase.auth.currentUser!.id;
 
     try {
+      // Validar bloqueos y solapamientos
+      await _checkDoctorAvailability(doctorId, date);
       // A. Guardar la cita
       await supabase.from('appointments').insert({
         'patient_id': userId,
@@ -130,6 +203,14 @@ class AppointmentController {
     }
   }
 
+  Future<void> deleteAppointment(String appointmentId) async {
+    try {
+      await supabase.from('appointments').delete().eq('id', appointmentId);
+    } catch (e) {
+      throw Exception("Error al eliminar la cita: $e");
+    }
+  }
+
   Future<void> updateAppointment({
     required String appointmentId,
     required DateTime date,
@@ -137,6 +218,13 @@ class AppointmentController {
     required String reason,
   }) async {
     try {
+      // 1. Obtener la cita actual para saber el doctor_id
+      final currentApt = await supabase.from('appointments').select('doctor_id').eq('id', appointmentId).single();
+      final doctorId = currentApt['doctor_id'];
+
+      // 2. Validar bloqueos y solapamientos (ignorando esta misma cita)
+      await _checkDoctorAvailability(doctorId, date, ignoreAppointmentId: appointmentId);
+
       await supabase.from('appointments').update({
         'appointment_date': date.toUtc().toIso8601String(),
         'type': type,

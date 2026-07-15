@@ -33,11 +33,22 @@ final recentScansProvider = FutureProvider.autoDispose<List<Map<String, dynamic>
   final supabase = Supabase.instance.client;
   final response = await supabase
       .from('ai_scans')
-      .select('*, profiles(full_name)')
+      .select('*, profiles:patient_id(full_name)')
       .order('created_at', ascending: false)
       .limit(10);
   return response;
 });
+
+// 3.1. TODOS LOS ESCANEOS
+final allScansProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  final supabase = Supabase.instance.client;
+  final response = await supabase
+      .from('ai_scans')
+      .select('*, profiles:patient_id(full_name)')
+      .order('created_at', ascending: false);
+  return response;
+});
+
 
 // 3.5. LISTA DE USUARIOS POR ROL (ADMIN)
 final adminUserListProvider = FutureProvider.autoDispose.family<List<Map<String, dynamic>>, String>((ref, role) async {
@@ -195,11 +206,8 @@ class AdminController {
         'name': name,
         'address': address,
         'status_text': statusText,
-        'is_open': isOpen,
-        'lat': lat,
-        'lng': lng,
-        'image_url': imageUrl1,
-        'image_url_2': imageUrl2,
+        'latitude': lat,
+        'longitude': lng,
       });
       ref.invalidate(medicalCentersProvider);
     } catch (e) {
@@ -246,11 +254,8 @@ class AdminController {
         'name': name,
         'address': address,
         'status_text': statusText,
-        'is_open': isOpen,
-        'lat': lat,
-        'lng': lng,
-        'image_url': imageUrl1,
-        'image_url_2': imageUrl2,
+        'latitude': lat,
+        'longitude': lng,
       }).eq('id', centerId);
       ref.invalidate(medicalCentersProvider);
     } catch (e) {
@@ -264,6 +269,55 @@ class AdminController {
       ref.invalidate(medicalCentersProvider);
     } catch (e) {
       throw Exception("Error al eliminar centro médico: $e");
+    }
+  }
+
+  // --- GESTIÓN DE FILTROS DEL MAPA ---
+  Future<void> addMapFilter(String name, String keywords) async {
+    try {
+      await supabase.from('map_filters').insert({
+        'name': name,
+        'keywords': keywords,
+      });
+      // Importante: invalidamos el mapFiltersProvider para refrescar la UI
+      ref.invalidate(mapFiltersProvider);
+    } catch (e) {
+      throw Exception("Error al agregar filtro: $e");
+    }
+  }
+
+  Future<void> updateMapFilter({
+    required String filterId,
+    required String name,
+    required String keywords,
+  }) async {
+    try {
+      await supabase.from('map_filters').update({
+        'name': name,
+        'keywords': keywords,
+      }).eq('id', filterId);
+      ref.invalidate(mapFiltersProvider);
+    } catch (e) {
+      throw Exception("Error al actualizar filtro: $e");
+    }
+  }
+
+  Future<void> deleteMapFilter(String filterId) async {
+    try {
+      await supabase.from('map_filters').delete().eq('id', filterId);
+      ref.invalidate(mapFiltersProvider);
+    } catch (e) {
+      throw Exception("Error al eliminar filtro: $e");
+    }
+  }
+
+  Future<void> deleteUser(String userId, String role) async {
+    try {
+      await supabase.from('profiles').delete().eq('id', userId);
+      ref.invalidate(adminUserListProvider(role));
+      ref.invalidate(adminMetricsProvider);
+    } catch (e) {
+      throw Exception("Error al eliminar usuario: $e");
     }
   }
 }

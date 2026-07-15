@@ -6,6 +6,7 @@ import 'register_screen.dart';
 import 'initial_quiz_screen.dart';
 import 'forgot_password_screen.dart';
 import 'reset_password_screen.dart';
+import 'complete_profile_screen.dart'; // 🚀 NUEVO IMPORT
 import '../admin/admin_dashboard.dart';
 import '../doctor/doctor_dashboard.dart';
 import '../doctor/doctor_setup_screen.dart';
@@ -80,7 +81,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         final role = next.role;
         Widget nextScreen;
 
-        if (role == UserRole.admin) {
+        if (next.isProfileIncomplete) {
+          nextScreen = const CompleteProfileScreen();
+        } else if (role == UserRole.admin) {
           nextScreen = const AdminDashboard();
         } else if (role == UserRole.doctor) {
           if (!next.hasCompletedSetup) {

@@ -22,7 +22,7 @@ class _PatientAIChatScreenState extends ConsumerState<PatientAIChatScreen> {
   final List<String> _suggestions = [
     "🔍 Explicar diagnóstico",
     "💡 Ver recomendaciones",
-    "🩺 Preguntas para mi médico",
+    "🩺 Preguntas para el Especialista",
     "🩺 Consultar Médico / Telemedicina",
   ];
 

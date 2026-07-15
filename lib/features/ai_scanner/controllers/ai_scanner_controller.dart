@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../../auth/profile_provider.dart';
+import '../../../core/services/notification_service.dart';
 
 final aiScannerControllerProvider = AsyncNotifierProvider<AiScannerController, Map<String, dynamic>?>(
   AiScannerController.new,
@@ -64,7 +65,7 @@ class AiScannerController extends AsyncNotifier<Map<String, dynamic>?> {
       // Formateamos una recomendación de grado clínico enriquecida
       final String formattedQuestions = suggestedQuestionsList.isNotEmpty 
           ? suggestedQuestionsList.map((q) => "• $q").join("\n")
-          : "• ¿Qué tipo de tratamiento tópico es el más recomendable?\n• ¿Con qué frecuencia debo monitorear esta zona?\n• ¿Existe algún signo de alarma por el cual deba acudir a urgencias?";
+          : "• ¿Podría evaluar si este brote en mi piel requiere un tratamiento tópico específico?\n• ¿Con qué frecuencia me recomienda monitorear esta zona de mi rostro?\n• ¿Cuáles serían los signos de alarma por los que debería consultar de emergencia?";
 
       final String richRecommendation = 
           "🛡️ **NIVEL DE CONFIANZA IA:** $confidenceScore%\n\n"
@@ -97,6 +98,46 @@ class AiScannerController extends AsyncNotifier<Map<String, dynamic>?> {
         'event_type': (riskLevel == 'high' || riskLevel == 'urgent') ? 'warning' : 'info',
         'image_url': publicImageUrl,
       });
+
+      // --- FASE E: EVALUACIÓN DE EVOLUCIÓN PARA NOTIFICACIÓN INSTANTÁNEA ---
+      try {
+        final evolutionEvents = await supabase
+            .from('skin_evolution')
+            .select('event_type')
+            .eq('user_id', user.id)
+            .order('created_at', ascending: false)
+            .limit(2);
+
+        if (evolutionEvents.length >= 2) {
+          final currentEvent = evolutionEvents[0];
+          final previousEvent = evolutionEvents[1];
+
+          final bool curWarning = currentEvent['event_type'] == 'warning';
+          final bool prevWarning = previousEvent['event_type'] == 'warning';
+
+          String notifTitle = "";
+          String notifBody = "";
+
+          if (curWarning && !prevWarning) {
+            notifTitle = "⚠️ Alerta de Evolución Dérmica";
+            notifBody = "Se ha detectado un cambio desfavorable en tu piel en comparación con tu análisis anterior. Te aconsejamos programar una consulta.";
+          } else if (!curWarning && prevWarning) {
+            notifTitle = "🎉 ¡Progreso en tu Piel!";
+            notifBody = "Se observa una mejora notable en tu sintomatología con respecto al último análisis. ¡Continúa con tus cuidados!";
+          }
+
+          if (notifTitle.isNotEmpty) {
+            await NotificationService().showInstantNotification(
+              id: 2001,
+              title: notifTitle,
+              body: notifBody,
+            );
+          }
+        }
+      } catch (e) {
+        // Capturar errores para no arruinar el flujo si la notificación falla
+        print("⚠️ Error al evaluar evolución para notificación: $e");
+      }
 
       ref.invalidate(skinTimelineProvider);
       

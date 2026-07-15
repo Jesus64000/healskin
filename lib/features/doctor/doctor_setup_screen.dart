@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme/app_colors.dart';
+import '../auth/profile_provider.dart';
 import 'doctor_dashboard.dart';
+import 'doctor_consultorio_location_screen.dart';
 
-class DoctorSetupScreen extends StatefulWidget {
+class DoctorSetupScreen extends ConsumerStatefulWidget {
   const DoctorSetupScreen({super.key});
 
   @override
-  State<DoctorSetupScreen> createState() => _DoctorSetupScreenState();
+  ConsumerState<DoctorSetupScreen> createState() => _DoctorSetupScreenState();
 }
 
-class _DoctorSetupScreenState extends State<DoctorSetupScreen> {
+class _DoctorSetupScreenState extends ConsumerState<DoctorSetupScreen> {
   final _formKey = GlobalKey<FormState>();
   final _licenseController = TextEditingController();
 
@@ -34,9 +37,23 @@ class _DoctorSetupScreenState extends State<DoctorSetupScreen> {
   }
 
   Future<void> _saveDoctorProfile() async {
+    final profile = ref.read(userProfileProvider).value;
+    final officeAddress = profile?['office_address'] as String?;
+
     if (!_formKey.currentState!.validate() || _selectedSpecialty == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Por favor completa todos los campos"), backgroundColor: AppColors.warning),
+      );
+      return;
+    }
+
+    if (officeAddress == null || officeAddress.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Por favor configura la ubicación de tu consultorio presencial"),
+          backgroundColor: AppColors.warning,
+          behavior: SnackBarBehavior.floating,
+        ),
       );
       return;
     }
@@ -120,6 +137,8 @@ class _DoctorSetupScreenState extends State<DoctorSetupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final profileAsync = ref.watch(userProfileProvider);
+    final officeAddress = profileAsync.value?['office_address'] as String?;
     return Scaffold(
       backgroundColor: AppColors.primary,
       body: SafeArea(
@@ -172,7 +191,65 @@ class _DoctorSetupScreenState extends State<DoctorSetupScreen> {
                     ),
                     validator: (value) => value == null || value.isEmpty ? "La licencia es obligatoria" : null,
                   ),
-                  const SizedBox(height: 50),
+                  const SizedBox(height: 25),
+
+                  // SECCIÓN: UBICACIÓN DEL CONSULTORIO
+                  const Text("Ubicación del Consultorio (Presencial)", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 10),
+                  InkWell(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const DoctorConsultorioLocationScreen()),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(15),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.location_on_outlined, color: AppColors.primary, size: 28),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  officeAddress != null && officeAddress.isNotEmpty
+                                      ? officeAddress
+                                      : "Configurar ubicación física...",
+                                  style: TextStyle(
+                                    color: officeAddress != null && officeAddress.isNotEmpty
+                                        ? AppColors.textPrimary
+                                        : Colors.black54,
+                                    fontSize: 14,
+                                    fontWeight: officeAddress != null && officeAddress.isNotEmpty
+                                        ? FontWeight.w600
+                                        : FontWeight.normal,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                if (officeAddress != null && officeAddress.isNotEmpty)
+                                  const SizedBox(height: 4),
+                                if (officeAddress != null && officeAddress.isNotEmpty)
+                                  const Text(
+                                    "Toca para modificar",
+                                    style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.bold),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.arrow_forward_ios, color: AppColors.primary, size: 14),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 40),
 
                   // BOTÓN GUARDAR (Refactorizado el texto)
                   SizedBox(

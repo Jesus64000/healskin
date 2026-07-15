@@ -81,6 +81,17 @@ class _PatientTelemedicineRoomScreenState extends State<PatientTelemedicineRoomS
         uid: 0,
       );
       setState(() => _localUserJoined = true);
+    } on FunctionException catch (e) {
+      final errorMessage = e.details ?? e.reasonPhrase ?? e.toString();
+      debugPrint("⚠️ ERROR EN TELEMEDICINA IA/RTC (FunctionException - PACIENTE): $errorMessage");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error al conectar videoconsulta: $errorMessage"),
+            backgroundColor: AppColors.danger,
+          ),
+        );
+      }
     } catch (e) {
       debugPrint("⚠️ ERROR EN TELEMEDICINA IA/RTC (PACIENTE): $e");
       if (mounted) {
@@ -97,7 +108,11 @@ class _PatientTelemedicineRoomScreenState extends State<PatientTelemedicineRoomS
   @override
   void dispose() {
     _timer?.cancel();
-    _agoraService.leaveChannel();
+    try {
+      _agoraService.leaveChannel();
+    } catch (e) {
+      debugPrint("Error al colgar canal en dispose: $e");
+    }
     super.dispose();
   }
 

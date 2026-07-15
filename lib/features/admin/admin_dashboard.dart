@@ -10,6 +10,8 @@ import 'admin_clinic_management_view.dart';
 import 'quizzes_admin_screen.dart';
 import 'admin_doctor_approval_screen.dart';
 import 'admin_users_view.dart';
+import 'admin_map_filters_view.dart';
+import 'admin_scans_history_screen.dart';
 
 class AdminDashboard extends ConsumerWidget {
   const AdminDashboard({super.key});
@@ -295,6 +297,36 @@ class AdminDashboard extends ConsumerWidget {
             ),
           ],
         ),
+        const SizedBox(height: 15),
+        Row(
+          children: [
+            Expanded(
+              child: _managementCard(
+                title: "Filtros Mapa",
+                subtitle: "Filtros de Búsqueda",
+                icon: Icons.filter_alt_outlined,
+                color: Colors.purple,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AdminMapFiltersView()),
+                ),
+              ),
+            ),
+            const SizedBox(width: 15),
+            Expanded(
+              child: _managementCard(
+                title: "Historial Escaneos",
+                subtitle: "Auditoría Completa",
+                icon: Icons.history_rounded,
+                color: Colors.teal,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AdminScansHistoryScreen()),
+                ),
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -436,7 +468,7 @@ class AdminDashboard extends ConsumerWidget {
             children: scans.map((scan) {
               final patientName = scan['profiles']?['full_name'] ?? 'Paciente';
               final date = scan['created_at'] != null
-                  ? DateFormat('dd MMM, HH:mm').format(DateTime.parse(scan['created_at']).toLocal())
+                  ? DateFormat('dd MMM, HH:mm', 'es').format(DateTime.parse(scan['created_at']).toLocal())
                   : 'Fecha desc.';
               final String rawRisk = (scan['risk_level'] ?? 'low').toString().toLowerCase().trim();
               final isRisk = rawRisk.contains('high') ||
