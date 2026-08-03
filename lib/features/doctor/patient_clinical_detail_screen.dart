@@ -1023,7 +1023,7 @@ class PatientClinicalDetailScreen extends ConsumerWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.picture_as_pdf_outlined, color: AppColors.primary, size: 26),
-            tooltip: "Exportar Expediente (PDF)",
+            tooltip: "Exportar Reporte Médico (PDF)",
             onPressed: () async {
               final data = patientDataAsync.value;
               if (data == null) {
@@ -1037,48 +1037,19 @@ class PatientClinicalDetailScreen extends ConsumerWidget {
               }
 
               final profile = data['profile'];
-              final scansHistory = data['scansHistory'] as List<dynamic>? ?? [];
               final notesHistory = data['notesHistory'] as List<dynamic>? ?? [];
-              final appointmentsHistory = data['appointmentsHistory'] as List<dynamic>? ?? [];
 
-              // Mostrar indicador estético de generación
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Row(
-                    children: [
-                      SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                      ),
-                      SizedBox(width: 15),
-                      Text("Generando reporte PDF clínico..."),
-                    ],
+              if (notesHistory.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text("El paciente no cuenta con evaluaciones médicas registradas para exportar."),
+                    backgroundColor: AppColors.warning,
                   ),
-                  backgroundColor: AppColors.primary,
-                  duration: Duration(seconds: 1),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-
-              try {
-                await ClinicalPdfService.exportPatientHistory(
-                  profile: profile,
-                  scans: scansHistory,
-                  notes: notesHistory,
-                  appointments: appointmentsHistory,
                 );
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text("Error al generar PDF: $e"),
-                      backgroundColor: AppColors.danger,
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                }
+                return;
               }
+
+              _showPdfNoteSelectionDialog(context, profile, notesHistory);
             },
           ),
           IconButton(
@@ -1990,6 +1961,143 @@ class PatientClinicalDetailScreen extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+
+  void _showPdfNoteSelectionDialog(BuildContext context, Map<String, dynamic> profile, List<dynamic> notes) {
+    List<dynamic> selectedNotes = List.from(notes); // Por defecto todas seleccionadas
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final allSelected = selectedNotes.length == notes.length;
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Row(
+                children: const [
+                  Icon(Icons.picture_as_pdf, color: AppColors.primary),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      "Seleccionar Diagnósticos para PDF",
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "Selecciona las patologías / evaluaciones médicas que deseas incluir en el reporte:",
+                      style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                    ),
+                    const SizedBox(height: 10),
+                    CheckboxListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text("Seleccionar Todas", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      value: allSelected,
+                      activeColor: AppColors.primary,
+                      onChanged: (val) {
+                        setModalState(() {
+                          if (val == true) {
+                            selectedNotes = List.from(notes);
+                          } else {
+                            selectedNotes.clear();
+                          }
+                        });
+                      },
+                    ),
+                    const Divider(),
+                    Flexible(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          children: notes.map((note) {
+                            final isChecked = selectedNotes.contains(note);
+                            final diag = note['clinical_diagnosis'] ?? 'Sin diagnóstico';
+                            final dateStr = note['created_at'] != null ? note['created_at'].toString() : '';
+                            String dateFormatted = '';
+                            if (dateStr.isNotEmpty) {
+                              try {
+                                final date = DateTime.parse(dateStr).toLocal();
+                                dateFormatted = DateFormat('dd/MM/yyyy - hh:mm a').format(date);
+                              } catch (_) {}
+                            }
+
+                            return CheckboxListTile(
+                              dense: true,
+                              activeColor: AppColors.primary,
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(
+                                diag,
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              subtitle: dateFormatted.isNotEmpty
+                                  ? Text("Fecha: $dateFormatted", style: const TextStyle(fontSize: 11))
+                                  : null,
+                              value: isChecked,
+                              onChanged: (val) {
+                                setModalState(() {
+                                  if (val == true) {
+                                    selectedNotes.add(note);
+                                  } else {
+                                    selectedNotes.remove(note);
+                                  }
+                                });
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text("Cancelar", style: TextStyle(color: AppColors.textSecondary)),
+                ),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.picture_as_pdf, size: 18, color: Colors.white),
+                  label: const Text("Generar PDF", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: selectedNotes.isEmpty
+                      ? null
+                      : () async {
+                          Navigator.pop(ctx);
+                          try {
+                            await ClinicalPdfService.exportPatientHistory(
+                              profile: profile,
+                              selectedNotes: selectedNotes,
+                            );
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text("Error al generar PDF: $e"),
+                                  backgroundColor: AppColors.danger,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }

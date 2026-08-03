@@ -26,7 +26,7 @@ class _AdminScansHistoryScreenState extends ConsumerState<AdminScansHistoryScree
   void _showScanDetails(Map<String, dynamic> scan) {
     final patientName = scan['profiles']?['full_name'] ?? 'Paciente';
     final date = scan['created_at'] != null
-        ? DateFormat('dd MMMM yyyy, HH:mm', 'es').format(DateTime.parse(scan['created_at']).toLocal())
+        ? DateFormat('dd MMMM yyyy, hh:mm a', 'es').format(DateTime.parse(scan['created_at']).toLocal())
         : 'Fecha desc.';
     final diagnosis = scan['ai_diagnosis'] ?? 'Sin diagnóstico';
     final recommendation = scan['recommendation'] ?? 'Sin recomendaciones registradas.';
@@ -336,7 +336,7 @@ class _AdminScansHistoryScreenState extends ConsumerState<AdminScansHistoryScree
                     final scan = filteredScans[index];
                     final patientName = scan['profiles']?['full_name'] ?? 'Paciente';
                     final date = scan['created_at'] != null
-                        ? DateFormat('dd MMM, HH:mm', 'es').format(DateTime.parse(scan['created_at']).toLocal())
+                        ? DateFormat('dd MMM, hh:mm a', 'es').format(DateTime.parse(scan['created_at']).toLocal())
                         : 'Fecha desc.';
                     final diagnosis = scan['ai_diagnosis'] ?? 'Sin diagnóstico';
                     final imageUrl = scan['image_url'] as String?;

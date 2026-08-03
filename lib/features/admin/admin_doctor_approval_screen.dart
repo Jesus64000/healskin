@@ -92,7 +92,7 @@ class AdminDoctorApprovalScreen extends ConsumerWidget {
                 final name = doc['full_name'] ?? 'Dr. Desconocido';
                 final license = doc['license_number'] ?? 'Sin Licencia';
                 final date = doc['created_at'] != null
-                    ? DateFormat('dd MMM yyyy, HH:mm', 'es').format(DateTime.parse(doc['created_at']).toLocal())
+                    ? DateFormat('dd MMM yyyy, hh:mm a', 'es').format(DateTime.parse(doc['created_at']).toLocal())
                     : 'Fecha desc.';
 
                 return GestureDetector(

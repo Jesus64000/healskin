@@ -4,19 +4,21 @@ import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 
 class ClinicalPdfService {
+  /// Exporta únicamente la información y diagnósticos ingresados por el médico especialista,
+  /// permitiendo seleccionar las notas/patologías deseadas (una, varias o todas).
   static Future<void> exportPatientHistory({
     required Map<String, dynamic> profile,
-    required List<dynamic> scans,
-    required List<dynamic> notes,
-    required List<dynamic> appointments,
+    required List<dynamic> selectedNotes,
   }) async {
     final pdf = pw.Document();
 
     final String fullName = profile['full_name'] ?? 'Paciente Desconocido';
     final String idCard = profile['identification_id'] ?? 'No registrada';
     final String skinType = (profile['skin_type']?.toString().toUpperCase() ?? 'NO DEFINIDO');
-    final String glow = profile['glow_frequency'] ?? 'No respondido';
-    final String acne = profile['has_acne'] ?? 'No respondido';
+    final String age = profile['age']?.toString() ?? 'No registrada';
+    final String gender = profile['gender'] ?? 'No especificado';
+    final String allergies = profile['allergies'] ?? 'Ninguna';
+    final String medicalHistory = profile['medical_history'] ?? 'Ninguno';
 
     pdf.addPage(
       pw.MultiPage(
@@ -49,7 +51,7 @@ class ClinicalPdfService {
                 crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
                   pw.Text(
-                    "REPORTE CLÍNICO",
+                    "REPORTE CLÍNICO MÉDICO",
                     style: pw.TextStyle(
                       fontSize: 14,
                       fontWeight: pw.FontWeight.bold,
@@ -58,17 +60,17 @@ class ClinicalPdfService {
                   ),
                   pw.SizedBox(height: 4),
                   pw.Text(
-                    "Fecha: ${DateFormat('dd/MM/yyyy - hh:mm a').format(DateTime.now())}",
-                    style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600),
+                    "Fecha de emisión: ${DateFormat('dd/MM/yyyy - hh:mm a').format(DateTime.now())}",
+                    style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600),
                   ),
                 ],
               ),
             ],
           ),
           pw.Divider(thickness: 1.5, color: PdfColor.fromHex('#4B39EF')),
-          pw.SizedBox(height: 15),
+          pw.SizedBox(height: 12),
 
-          // 👤 FICHA DEMOGRÁFICA DEL PACIENTE
+          // 👤 FICHA DEMOGRÁFICA Y SALUD DEL PACIENTE
           pw.Container(
             padding: const pw.EdgeInsets.all(12),
             decoration: const pw.BoxDecoration(
@@ -79,8 +81,8 @@ class ClinicalPdfService {
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
                 pw.Text(
-                  "1. DATOS PERSONALES DEL PACIENTE",
-                  style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.grey900),
+                  "1. DATOS DEL PACIENTE Y FICHA DE SALUD",
+                  style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.grey900),
                 ),
                 pw.SizedBox(height: 8),
                 pw.Row(
@@ -90,9 +92,11 @@ class ClinicalPdfService {
                       child: pw.Column(
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
-                          pw.Text("Nombre Completo: $fullName", style: const pw.TextStyle(fontSize: 10)),
-                          pw.SizedBox(height: 4),
-                          pw.Text("Cédula / ID: $idCard", style: const pw.TextStyle(fontSize: 10)),
+                          pw.Text("Paciente: $fullName", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey900)),
+                          pw.SizedBox(height: 3),
+                          pw.Text("Cédula / ID: $idCard", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey800)),
+                          pw.SizedBox(height: 3),
+                          pw.Text("Tipo de Piel: $skinType", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey800)),
                         ],
                       ),
                     ),
@@ -100,106 +104,58 @@ class ClinicalPdfService {
                       child: pw.Column(
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
-                          pw.Text("Tipo de Piel: $skinType", style: const pw.TextStyle(fontSize: 10)),
-                          pw.SizedBox(height: 4),
-                          pw.Text("Propensión Acné: $acne", style: const pw.TextStyle(fontSize: 10)),
+                          pw.Text("Edad: $age", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey800)),
+                          pw.SizedBox(height: 3),
+                          pw.Text("Género: $gender", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey800)),
+                          pw.SizedBox(height: 3),
+                          pw.Text("Alergias: $allergies", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey800)),
                         ],
                       ),
                     ),
                   ],
                 ),
+                if (medicalHistory != 'Ninguno' && medicalHistory.isNotEmpty) ...[
+                  pw.SizedBox(height: 4),
+                  pw.Text("Antecedentes Médicos: $medicalHistory", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey800)),
+                ],
               ],
             ),
           ),
-          pw.SizedBox(height: 20),
+          pw.SizedBox(height: 18),
 
-          // 🔬 HISTORIAL DE ESCANEOS IA (DIAGNOSTICO ASISTIDO)
+          // 📝 HISTORIAL DE DIAGNÓSTICOS E INDICACIONES MÉDICAS SELECCIONADAS
           pw.Text(
-            "2. DIAGNÓSTICO ASISTIDO POR IA - EVOLUCIÓN",
-            style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#4B39EF')),
+            "2. DIAGNÓSTICO E INDICACIONES DEL MÉDICO ESPECIALISTA",
+            style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#4B39EF')),
           ),
           pw.SizedBox(height: 8),
-          if (scans.isEmpty)
-            pw.Text("El paciente aún no ha realizado escaneos de evolución en-app.", style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600))
-          else
-            pw.Table(
-              border: const pw.TableBorder(
-                horizontalInside: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
-                verticalInside: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
-                top: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
-                bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
-                left: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
-                right: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
+          if (selectedNotes.isEmpty)
+            pw.Container(
+              padding: const pw.EdgeInsets.all(12),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.grey300),
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
               ),
-              columnWidths: {
-                0: const pw.FlexColumnWidth(2),
-                1: const pw.FlexColumnWidth(4),
-                2: const pw.FlexColumnWidth(2),
-                3: const pw.FlexColumnWidth(4),
-              },
-              children: [
-                // Cabecera Tabla
-                pw.TableRow(
-                  decoration: const pw.BoxDecoration(color: PdfColors.grey200),
-                  children: [
-                    pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text("Fecha", style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold))),
-                    pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text("Diagnóstico IA", style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold))),
-                    pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text("Riesgo", style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold))),
-                    pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text("Recomendación IA", style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold))),
-                  ],
-                ),
-                // Filas Tabla
-                ...scans.map((scan) {
-                  final date = DateTime.parse(scan['created_at']).toLocal();
-                  final dateFormatted = DateFormat('dd/MM/yyyy').format(date);
-                  final String rawRisk = (scan['risk_level'] ?? 'low').toString().toLowerCase().trim();
-                  String riskLabel = 'Bajo';
-                  if (rawRisk.contains('medium') || rawRisk.contains('medio')) {
-                    riskLabel = 'Medio';
-                  } else if (rawRisk.contains('high') || rawRisk.contains('alto')) {
-                    riskLabel = 'Alto';
-                  } else if (rawRisk.contains('urgent') || rawRisk.contains('urgente')) {
-                    riskLabel = 'Urgente';
-                  }
-                  final String diag = scan['ai_diagnosis'] ?? 'Análisis Dérmico';
-                  final String rec = scan['recommendation'] ?? 'Sin observaciones';
-
-                  return pw.TableRow(
-                    children: [
-                      pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(dateFormatted, style: const pw.TextStyle(fontSize: 9))),
-                      pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(diag, style: const pw.TextStyle(fontSize: 9))),
-                      pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(riskLabel, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold))),
-                      pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(rec, style: const pw.TextStyle(fontSize: 8))),
-                    ],
-                  );
-                }),
-              ],
-            ),
-          pw.SizedBox(height: 20),
-
-          // 📝 HISTORIAL CLÍNICO DE NOTAS MÉDICAS (DERMATÓLOGO)
-          pw.Text(
-            "3. HISTORIAL DE NOTAS CLÍNICAS (MÉDICO)",
-            style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#4B39EF')),
-          ),
-          pw.SizedBox(height: 8),
-          if (notes.isEmpty)
-            pw.Text("No se registran consultas ni notas clínicas de especialistas aún.", style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600))
+              child: pw.Text("No se seleccionaron evaluaciones ni notas clínicas para incluir en este reporte.", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600)),
+            )
           else
             pw.Column(
-              children: notes.map((note) {
+              children: selectedNotes.map((note) {
                 final date = DateTime.parse(note['created_at']).toLocal();
                 final dateFormatted = DateFormat('dd/MM/yyyy - hh:mm a').format(date);
-                final String clinicalDiag = note['clinical_diagnosis'] ?? '';
-                final String prescription = note['prescription_notes'] ?? 'No recetado';
-                final String followUp = note['follow_up_plan'] ?? 'No planificado';
+                final String clinicalDiag = _cleanText(note['clinical_diagnosis'] ?? 'Sin diagnóstico especificado');
+                final String prescription = _cleanText(note['prescription_notes'] ?? 'No recetado');
+                final String followUp = _cleanText(note['follow_up_plan'] ?? 'No planificado');
+                final String procedure = _cleanText(note['procedure'] ?? note['procedure_name'] ?? '');
+                final String procedureFreq = _cleanText(note['procedure_frequency'] ?? '');
 
                 return pw.Container(
-                  margin: const pw.EdgeInsets.only(bottom: 10),
-                  padding: const pw.EdgeInsets.all(10),
+                  margin: const pw.EdgeInsets.only(bottom: 12),
+                  padding: const pw.EdgeInsets.all(12),
                   decoration: pw.BoxDecoration(
-                    border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
-                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                    color: PdfColors.white,
+                    border: pw.Border.all(color: PdfColor.fromHex('#4B39EF'), width: 0.8),
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
                   ),
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -207,46 +163,58 @@ class ClinicalPdfService {
                       pw.Row(
                         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                         children: [
-                          pw.Text("Consulta: $dateFormatted", style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800)),
+                          pw.Text("Consulta Médica: $dateFormatted", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#4B39EF'))),
                         ],
                       ),
                       pw.Divider(thickness: 0.5, color: PdfColors.grey300),
                       pw.SizedBox(height: 4),
                       pw.RichText(
                         text: pw.TextSpan(
-                          style: const pw.TextStyle(fontSize: 9, color: PdfColors.black),
+                          style: const pw.TextStyle(fontSize: 9.5, color: PdfColors.black),
                           children: [
                             pw.TextSpan(text: "Diagnóstico Clínico: ", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
                             pw.TextSpan(text: clinicalDiag),
                           ],
                         ),
                       ),
-                      pw.SizedBox(height: 4),
+                      pw.SizedBox(height: 6),
                       pw.RichText(
                         text: pw.TextSpan(
-                          style: const pw.TextStyle(fontSize: 9, color: PdfColors.black),
+                          style: const pw.TextStyle(fontSize: 9.5, color: PdfColors.black),
                           children: [
-                            pw.TextSpan(text: "Receta/Tratamiento: ", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                            pw.TextSpan(text: "Indicaciones / Receta Médica: ", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
                             pw.TextSpan(text: prescription),
                           ],
                         ),
                       ),
-                      pw.SizedBox(height: 4),
+                      pw.SizedBox(height: 6),
                       pw.RichText(
                         text: pw.TextSpan(
-                          style: const pw.TextStyle(fontSize: 9, color: PdfColors.black),
+                          style: const pw.TextStyle(fontSize: 9.5, color: PdfColors.black),
                           children: [
-                            pw.TextSpan(text: "Plan Seguimiento: ", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                            pw.TextSpan(text: "Plan de Seguimiento: ", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
                             pw.TextSpan(text: followUp),
                           ],
                         ),
                       ),
+                      if (procedure.isNotEmpty) ...[
+                        pw.SizedBox(height: 6),
+                        pw.RichText(
+                          text: pw.TextSpan(
+                            style: const pw.TextStyle(fontSize: 9.5, color: PdfColors.black),
+                            children: [
+                              pw.TextSpan(text: "Procedimiento Prescrito: ", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                              pw.TextSpan(text: "$procedure ${procedureFreq.isNotEmpty ? '($procedureFreq)' : ''}"),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 );
               }).toList(),
             ),
-          pw.SizedBox(height: 30),
+          pw.SizedBox(height: 35),
 
           // ✍️ FIRMA MÉDICA Y CONSENTIMIENTO
           pw.Align(
@@ -254,10 +222,10 @@ class ClinicalPdfService {
             child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.center,
               children: [
-                pw.Container(width: 150, height: 1, color: PdfColors.grey700),
+                pw.Container(width: 160, height: 1, color: PdfColors.grey700),
                 pw.SizedBox(height: 4),
-                pw.Text("Firma del Especialista", style: const pw.TextStyle(fontSize: 9)),
-                pw.Text("Dermatólogo HealSkin", style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                pw.Text("Firma y Sello del Especialista", style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                pw.Text("Dermatología Médica HealSkin", style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
               ],
             ),
           ),
@@ -268,7 +236,12 @@ class ClinicalPdfService {
     // 🚀 INVOCACIÓN NATIVA DE PREVISUALIZACIÓN Y DESCARGA
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdf.save(),
-      name: 'Expediente_${fullName.replaceAll(' ', '_')}.pdf',
+      name: 'Reporte_Clinico_${fullName.replaceAll(' ', '_')}.pdf',
     );
+  }
+
+  /// Limpia asteriscos de markdown y caracteres no imprimibles para el PDF
+  static String _cleanText(String text) {
+    return text.replaceAll('**', '').replaceAll('*', '').replaceAll('☒', '-').replaceAll('📌', '').trim();
   }
 }

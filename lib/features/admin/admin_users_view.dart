@@ -291,7 +291,7 @@ class AdminUserDetailScreen extends ConsumerWidget {
     final email = user['email'] ?? 'Sin correo registrado';
     final role = user['role'] ?? 'patient';
     final date = user['created_at'] != null
-        ? DateFormat('dd MMMM yyyy, HH:mm', 'es').format(DateTime.parse(user['created_at']).toLocal())
+        ? DateFormat('dd MMMM yyyy, hh:mm a', 'es').format(DateTime.parse(user['created_at']).toLocal())
         : 'Fecha desconocida';
 
     final avatarInitials = name.trim().split(' ').take(2).map((e) => e.isNotEmpty ? e[0].toUpperCase() : '').join();

@@ -203,6 +203,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 nextFocus: _dniFocus,
                 label: "Nombres y Apellidos Completos",
                 icon: Icons.person_outline,
+                inputFormatters: [
+                  FilteringTextInputFormatter.deny(RegExp(r'[0-9]')),
+                ],
                 validator: Validators.validateFullName,
               ),
               const SizedBox(height: 15),

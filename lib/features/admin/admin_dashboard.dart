@@ -468,7 +468,7 @@ class AdminDashboard extends ConsumerWidget {
             children: scans.map((scan) {
               final patientName = scan['profiles']?['full_name'] ?? 'Paciente';
               final date = scan['created_at'] != null
-                  ? DateFormat('dd MMM, HH:mm', 'es').format(DateTime.parse(scan['created_at']).toLocal())
+                  ? DateFormat('dd MMM, hh:mm a', 'es').format(DateTime.parse(scan['created_at']).toLocal())
                   : 'Fecha desc.';
               final String rawRisk = (scan['risk_level'] ?? 'low').toString().toLowerCase().trim();
               final isRisk = rawRisk.contains('high') ||

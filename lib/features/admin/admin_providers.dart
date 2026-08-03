@@ -313,8 +313,30 @@ class AdminController {
 
   Future<void> deleteUser(String userId, String role) async {
     try {
+      // 1. Limpiar registros dependientes para evitar fallos de Foreign Key
+      try {
+        await supabase.from('ai_scans').delete().eq('patient_id', userId);
+      } catch (_) {}
+      try {
+        await supabase.from('appointments').delete().or('patient_id.eq.$userId,doctor_id.eq.$userId');
+      } catch (_) {}
+      try {
+        await supabase.from('medical_notes').delete().or('patient_id.eq.$userId,doctor_id.eq.$userId');
+      } catch (_) {}
+      try {
+        await supabase.from('chat_messages').delete().or('sender_id.eq.$userId,receiver_id.eq.$userId');
+      } catch (_) {}
+      try {
+        await supabase.from('patient_procedures').delete().eq('patient_id', userId);
+      } catch (_) {}
+
+      // 2. Eliminar el perfil del usuario
       await supabase.from('profiles').delete().eq('id', userId);
-      ref.invalidate(adminUserListProvider(role));
+
+      // 3. Invalidar todos los listados para actualizar la pantalla al instante
+      ref.invalidate(adminUserListProvider('patient'));
+      ref.invalidate(adminUserListProvider('doctor'));
+      ref.invalidate(pendingDoctorsProvider);
       ref.invalidate(adminMetricsProvider);
     } catch (e) {
       throw Exception("Error al eliminar usuario: $e");
