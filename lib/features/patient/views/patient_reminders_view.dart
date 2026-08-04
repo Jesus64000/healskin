@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'dart:convert';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_colors.dart';
 import 'patient_appointments_provider.dart';
@@ -27,14 +28,20 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
     _loadPreferences();
   }
 
+  String _getPrefKey(String baseKey) {
+    final user = Supabase.instance.client.auth.currentUser;
+    final userId = user?.id ?? 'guest';
+    return '${baseKey}_$userId';
+  }
+
   Future<void> _loadPreferences() async {
     bool loadFailed = false;
     try {
       final prefs = await SharedPreferences.getInstance();
       
-      final String? morningJson = prefs.getString('healskin_morning_routine');
-      final String? nightJson = prefs.getString('healskin_night_routine');
-      final String? customJson = prefs.getString('healskin_custom_reminders');
+      final String? morningJson = prefs.getString(_getPrefKey('healskin_morning_routine'));
+      final String? nightJson = prefs.getString(_getPrefKey('healskin_night_routine'));
+      final String? customJson = prefs.getString(_getPrefKey('healskin_custom_reminders'));
 
       setState(() {
         if (morningJson != null) {
@@ -74,7 +81,7 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
 
         // --- 📅 REINICIO DIARIO DE RUTINAS ---
         final String todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
-        final String? lastDate = prefs.getString('healskin_routine_last_date');
+        final String? lastDate = prefs.getString(_getPrefKey('healskin_routine_last_date'));
         
         if (lastDate != todayStr) {
           for (var item in _morningRoutine) {
@@ -83,9 +90,9 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
           for (var item in _nightRoutine) {
             item['done'] = false;
           }
-          prefs.setString('healskin_morning_routine', json.encode(_morningRoutine));
-          prefs.setString('healskin_night_routine', json.encode(_nightRoutine));
-          prefs.setString('healskin_routine_last_date', todayStr);
+          prefs.setString(_getPrefKey('healskin_morning_routine'), json.encode(_morningRoutine));
+          prefs.setString(_getPrefKey('healskin_night_routine'), json.encode(_nightRoutine));
+          prefs.setString(_getPrefKey('healskin_routine_last_date'), todayStr);
         }
 
         _isLoadingPrefs = false;
@@ -124,9 +131,9 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
   Future<void> _savePreferences() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('healskin_morning_routine', json.encode(_morningRoutine));
-      await prefs.setString('healskin_night_routine', json.encode(_nightRoutine));
-      await prefs.setString('healskin_custom_reminders', json.encode(_customReminders));
+      await prefs.setString(_getPrefKey('healskin_morning_routine'), json.encode(_morningRoutine));
+      await prefs.setString(_getPrefKey('healskin_night_routine'), json.encode(_nightRoutine));
+      await prefs.setString(_getPrefKey('healskin_custom_reminders'), json.encode(_customReminders));
     } catch (e) {
       debugPrint("Error saving SharedPreferences: $e");
     }
@@ -191,13 +198,30 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
     return (morningDone + nightDone) / totalTasks;
   }
 
-  void _showAddReminderModal() {
-    final TextEditingController titleController = TextEditingController();
-    final TextEditingController noteController = TextEditingController();
+  void _showAddReminderModal({Map<String, dynamic>? reminderToEdit}) {
+    final TextEditingController titleController = TextEditingController(text: reminderToEdit?['title'] ?? '');
+    final TextEditingController noteController = TextEditingController(text: reminderToEdit?['note'] ?? '');
+    
     TimeOfDay selectedTime = const TimeOfDay(hour: 16, minute: 0);
-    String selectedType = 'specific_time';
+    String selectedType = reminderToEdit?['type'] ?? 'specific_time';
     String selectedPresetValue = 'morning';
     String selectedIntervalValue = '4';
+
+    if (reminderToEdit != null) {
+      final String val = reminderToEdit['value'] ?? (reminderToEdit['time'] ?? '');
+      if (selectedType == 'specific_time' && val.contains(':')) {
+        try {
+          final parts = val.split(':');
+          final h = int.parse(parts[0]);
+          final m = int.parse(parts[1]);
+          selectedTime = TimeOfDay(hour: h, minute: m);
+        } catch (_) {}
+      } else if (selectedType == 'preset') {
+        selectedPresetValue = val.isNotEmpty ? val : 'morning';
+      } else if (selectedType == 'interval') {
+        selectedIntervalValue = val.isNotEmpty ? val : '4';
+      }
+    }
 
     showModalBottomSheet(
       context: context,
@@ -217,7 +241,10 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text("Agregar Alerta de Cuidado", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                    Text(
+                      reminderToEdit == null ? "Agregar Alerta de Cuidado" : "Editar Alerta de Cuidado",
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                    ),
                     const SizedBox(height: 15),
 
                     // Título
@@ -307,7 +334,7 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
                                 initialTime: selectedTime,
                                 builder: (context, child) {
                                   return MediaQuery(
-                                    data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+                                    data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
                                     child: child!,
                                   );
                                 },
@@ -323,7 +350,7 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
                       ),
                     ] else if (selectedType == 'preset') ...[
                       DropdownButtonFormField<String>(
-                        value: selectedPresetValue,
+                        initialValue: selectedPresetValue,
                         decoration: InputDecoration(
                           filled: true,
                           fillColor: AppColors.surfaceLight,
@@ -346,7 +373,7 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
                       ),
                     ] else if (selectedType == 'interval') ...[
                       DropdownButtonFormField<String>(
-                        value: selectedIntervalValue,
+                        initialValue: selectedIntervalValue,
                         decoration: InputDecoration(
                           filled: true,
                           fillColor: AppColors.surfaceLight,
@@ -380,7 +407,7 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         ),
-                        child: const Text("Guardar Alerta", style: TextStyle(fontWeight: FontWeight.bold)),
+                        child: Text(reminderToEdit == null ? "Guardar Alerta" : "Actualizar Alerta", style: const TextStyle(fontWeight: FontWeight.bold)),
                         onPressed: () {
                           if (titleController.text.trim().isEmpty) {
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -393,35 +420,63 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
                               ? "${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}"
                               : (selectedType == 'preset' ? selectedPresetValue : selectedIntervalValue);
 
-                          final Map<String, dynamic> newAlarm = {
-                            'id': DateTime.now().millisecondsSinceEpoch.toString(),
-                            'title': titleController.text.trim(),
-                            'type': selectedType,
-                            'value': alarmValue,
-                            'note': noteController.text.trim().isEmpty ? 'Recordatorio programado' : noteController.text.trim(),
-                            'active': true,
-                          };
+                          if (reminderToEdit != null) {
+                            setState(() {
+                              reminderToEdit['title'] = titleController.text.trim();
+                              reminderToEdit['type'] = selectedType;
+                              reminderToEdit['value'] = alarmValue;
+                              reminderToEdit['note'] = noteController.text.trim().isEmpty ? 'Recordatorio programado' : noteController.text.trim();
+                            });
+                            _savePreferences();
 
-                          setState(() {
-                            _customReminders.add(newAlarm);
-                          });
-                          _savePreferences(); // 🚀 Guarda en SharedPreferences
+                            try {
+                              if (reminderToEdit['active'] == true) {
+                                NotificationService().scheduleCustomReminder(
+                                  alarmId: reminderToEdit['id'] as String,
+                                  title: reminderToEdit['title'] as String,
+                                  note: reminderToEdit['note'] as String,
+                                  type: reminderToEdit['type'] as String,
+                                  value: reminderToEdit['value'] as String,
+                                );
+                              }
+                            } catch (e) {
+                              debugPrint("Error updating custom alarm: $e");
+                            }
+                          } else {
+                            final Map<String, dynamic> newAlarm = {
+                              'id': DateTime.now().millisecondsSinceEpoch.toString(),
+                              'title': titleController.text.trim(),
+                              'type': selectedType,
+                              'value': alarmValue,
+                              'note': noteController.text.trim().isEmpty ? 'Recordatorio programado' : noteController.text.trim(),
+                              'active': true,
+                            };
 
-                          try {
-                            NotificationService().scheduleCustomReminder(
-                              alarmId: newAlarm['id'] as String,
-                              title: newAlarm['title'] as String,
-                              note: newAlarm['note'] as String,
-                              type: newAlarm['type'] as String,
-                              value: newAlarm['value'] as String,
-                            );
-                          } catch (e) {
-                            debugPrint("Error scheduling custom alarm: $e");
+                            setState(() {
+                              _customReminders.add(newAlarm);
+                            });
+                            _savePreferences();
+
+                            try {
+                              NotificationService().scheduleCustomReminder(
+                                alarmId: newAlarm['id'] as String,
+                                title: newAlarm['title'] as String,
+                                note: newAlarm['note'] as String,
+                                type: newAlarm['type'] as String,
+                                value: newAlarm['value'] as String,
+                              );
+                            } catch (e) {
+                              debugPrint("Error scheduling custom alarm: $e");
+                            }
                           }
 
                           Navigator.pop(context);
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text("⏰ Alarma programada con éxito"), backgroundColor: AppColors.success, behavior: SnackBarBehavior.floating),
+                            SnackBar(
+                              content: Text(reminderToEdit == null ? "⏰ Alarma programada con éxito" : "✏️ Alarma actualizada con éxito"),
+                              backgroundColor: AppColors.success,
+                              behavior: SnackBarBehavior.floating,
+                            ),
                           );
                         },
                       ),
@@ -1009,10 +1064,12 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
                 } catch (e) {
                   debugPrint("Error canceling alarm: $e");
                 }
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Recordatorio eliminado"), backgroundColor: AppColors.success, behavior: SnackBarBehavior.floating),
-                );
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Recordatorio eliminado"), backgroundColor: AppColors.success, behavior: SnackBarBehavior.floating),
+                  );
+                }
               },
               child: const Text("Eliminar", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
             ),
@@ -1078,6 +1135,13 @@ class _PatientRemindersViewState extends ConsumerState<PatientRemindersView> {
               const SizedBox(height: 2),
               Row(
                 children: [
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined, size: 20, color: AppColors.primary),
+                    onPressed: () => _showAddReminderModal(reminderToEdit: alarm),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                  const SizedBox(width: 8),
                   IconButton(
                     icon: const Icon(Icons.delete_outline, size: 20, color: Colors.redAccent),
                     onPressed: () => _deleteAlarm(alarm),

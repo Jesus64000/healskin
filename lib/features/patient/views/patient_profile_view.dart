@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -228,6 +229,9 @@ class _PatientProfileViewState extends ConsumerState<PatientProfileView> {
                       TextFormField(
                         controller: nameController,
                         style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]')),
+                        ],
                         decoration: InputDecoration(
                           hintText: "Ej. María Pérez",
                           prefixIcon: const Icon(Icons.person_rounded, color: AppColors.primary),
@@ -252,6 +256,10 @@ class _PatientProfileViewState extends ConsumerState<PatientProfileView> {
                                   controller: ageController,
                                   keyboardType: TextInputType.number,
                                   style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                    LengthLimitingTextInputFormatter(3),
+                                  ],
                                   decoration: InputDecoration(
                                     hintText: "Ej. 25",
                                     prefixIcon: const Icon(Icons.cake_outlined, color: AppColors.primary),

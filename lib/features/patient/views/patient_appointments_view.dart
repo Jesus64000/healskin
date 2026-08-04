@@ -672,7 +672,7 @@ class PatientAppointmentsView extends ConsumerWidget {
                           initialTime: selectedTime,
                           builder: (context, child) {
                             return MediaQuery(
-                              data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+                              data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
                               child: Theme(
                                 data: Theme.of(context).copyWith(
                                   colorScheme: const ColorScheme.light(
@@ -1066,7 +1066,7 @@ void _showProcedureDetailSheet(BuildContext context, WidgetRef ref, Map<String, 
                       ),
                       child: const Text(
                         "No se registraron medicamentos para este tratamiento.",
-                        style: const TextStyle(fontSize: 13, height: 1.5, color: AppColors.textSecondary),
+                        style: TextStyle(fontSize: 13, height: 1.5, color: AppColors.textSecondary),
                       ),
                     ),
                     const SizedBox(height: 20),

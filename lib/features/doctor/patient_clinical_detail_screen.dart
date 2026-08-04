@@ -267,7 +267,7 @@ class PatientClinicalDetailScreen extends ConsumerWidget {
                               Expanded(
                                 flex: 3,
                                 child: DropdownButtonFormField<String>(
-                                  value: frequencyUnit,
+                                  initialValue: frequencyUnit,
                                   decoration: InputDecoration(
                                     filled: true,
                                     fillColor: AppColors.surfaceLight,
@@ -328,9 +328,13 @@ class PatientClinicalDetailScreen extends ConsumerWidget {
                                   return;
                                 }
                                 int multiplier = 1;
-                                if (frequencyUnit == "semanas") multiplier = 7;
-                                else if (frequencyUnit == "meses") multiplier = 30;
-                                else if (frequencyUnit == "años") multiplier = 365;
+                                if (frequencyUnit == "semanas") {
+                                  multiplier = 7;
+                                } else if (frequencyUnit == "meses") {
+                                  multiplier = 30;
+                                } else if (frequencyUnit == "años") {
+                                  multiplier = 365;
+                                }
                                 freq = qty * multiplier;
                               }
 
@@ -500,7 +504,7 @@ class PatientClinicalDetailScreen extends ConsumerWidget {
                             Expanded(
                               flex: 3,
                               child: DropdownButtonFormField<String>(
-                                value: frequencyUnit,
+                                initialValue: frequencyUnit,
                                 decoration: InputDecoration(
                                   filled: true,
                                   fillColor: AppColors.surfaceLight,
@@ -559,9 +563,13 @@ class PatientClinicalDetailScreen extends ConsumerWidget {
                                 return;
                               }
                               int multiplier = 1;
-                              if (frequencyUnit == "semanas") multiplier = 7;
-                              else if (frequencyUnit == "meses") multiplier = 30;
-                              else if (frequencyUnit == "años") multiplier = 365;
+                              if (frequencyUnit == "semanas") {
+                                multiplier = 7;
+                              } else if (frequencyUnit == "meses") {
+                                multiplier = 30;
+                              } else if (frequencyUnit == "años") {
+                                multiplier = 365;
+                              }
                               final freq = qty * multiplier;
 
                               setState(() => isSaving = true);
@@ -870,7 +878,7 @@ class PatientClinicalDetailScreen extends ConsumerWidget {
                             Expanded(
                               flex: 3,
                               child: DropdownButtonFormField<String>(
-                                value: frequencyUnit,
+                                initialValue: frequencyUnit,
                                 decoration: InputDecoration(
                                   filled: true,
                                   fillColor: AppColors.surfaceLight,
@@ -927,9 +935,13 @@ class PatientClinicalDetailScreen extends ConsumerWidget {
                                 return;
                               }
                               int multiplier = 1;
-                              if (frequencyUnit == "semanas") multiplier = 7;
-                              else if (frequencyUnit == "meses") multiplier = 30;
-                              else if (frequencyUnit == "años") multiplier = 365;
+                              if (frequencyUnit == "semanas") {
+                                multiplier = 7;
+                              } else if (frequencyUnit == "meses") {
+                                multiplier = 30;
+                              } else if (frequencyUnit == "años") {
+                                multiplier = 365;
+                              }
                               final freq = qty * multiplier;
 
                               setState(() => isSaving = true);

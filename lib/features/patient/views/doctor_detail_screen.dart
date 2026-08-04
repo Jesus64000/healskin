@@ -84,7 +84,7 @@ class _DoctorDetailScreenState extends ConsumerState<DoctorDetailScreen> {
       initialTime: const TimeOfDay(hour: 9, minute: 0), // 9:00 AM por defecto
       builder: (context, child) {
         return MediaQuery(
-          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
           child: Theme(
             data: Theme.of(context).copyWith(
               colorScheme: const ColorScheme.light(

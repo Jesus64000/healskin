@@ -158,15 +158,17 @@ class _DoctorDashboardState extends ConsumerState<DoctorDashboard> {
         final parts = payload.substring('chat:'.length).split('|');
         final otherUserId = parts[0];
         final otherUserName = parts.length > 1 ? parts[1] : 'Paciente';
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ChatView(
-              otherUserId: otherUserId,
-              otherUserName: otherUserName,
+        if (mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ChatView(
+                otherUserId: otherUserId,
+                otherUserName: otherUserName,
+              ),
             ),
-          ),
-        );
+          );
+        }
       }
     });
   }
@@ -243,17 +245,6 @@ class _DoctorHomeTab extends ConsumerWidget {
               style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
             ),
             actions: [
-              IconButton(
-                padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                constraints: const BoxConstraints(),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const ChatInboxScreen()),
-                  );
-                },
-                icon: const Icon(Icons.chat_bubble_outline, color: AppColors.primary, size: 24),
-              ),
               IconButton(
                 padding: const EdgeInsets.symmetric(horizontal: 4.0),
                 constraints: const BoxConstraints(),

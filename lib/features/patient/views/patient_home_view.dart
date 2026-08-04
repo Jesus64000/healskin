@@ -122,18 +122,6 @@ class _PatientHomeViewState extends ConsumerState<PatientHomeView> {
                         ),
                       ),
                       const SizedBox(width: 10),
-                      IconButton(
-                        icon: const Icon(Icons.chat_bubble_outline, color: AppColors.primary, size: 24),
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const ChatInboxScreen()),
-                          );
-                        },
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                      ),
-                      const SizedBox(width: 12),
                       InkWell(
                         onTap: () {
                           Navigator.push(
@@ -1021,7 +1009,7 @@ class _PatientHomeViewState extends ConsumerState<PatientHomeView> {
                       Image.network(
                         imageUrl,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
+                        errorBuilder: (ctx, err, stack) => Container(
                           color: AppColors.surfaceDark,
                           child: const Icon(Icons.broken_image, color: Colors.grey),
                         ),
@@ -1191,7 +1179,7 @@ class DermotipDetailScreen extends StatelessWidget {
                     Image.network(
                       imageUrl,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => const Center(
+                      errorBuilder: (ctx, err, stack) => const Center(
                         child: Icon(Icons.broken_image, size: 60, color: Colors.white60),
                       ),
                     )

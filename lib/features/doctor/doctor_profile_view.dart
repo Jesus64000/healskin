@@ -608,7 +608,7 @@ class _HorariosConfigBottomSheetState extends ConsumerState<_HorariosConfigBotto
                               helpText: "Hora de apertura de $dia",
                               builder: (context, child) {
                                 return MediaQuery(
-                                  data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+                                  data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
                                   child: child!,
                                 );
                               },
@@ -621,7 +621,7 @@ class _HorariosConfigBottomSheetState extends ConsumerState<_HorariosConfigBotto
                               helpText: "Hora de cierre de $dia",
                               builder: (context, child) {
                                 return MediaQuery(
-                                  data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+                                  data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
                                   child: child!,
                                 );
                               },

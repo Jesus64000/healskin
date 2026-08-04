@@ -494,6 +494,9 @@ class AdminUserDetailScreen extends ConsumerWidget {
         final userId = user['id'] ?? '';
         final userRole = user['role'] ?? 'patient';
         await ref.read(adminControllerProvider).deleteUser(userId, userRole);
+        ref.invalidate(adminUserListProvider('patient'));
+        ref.invalidate(adminUserListProvider('doctor'));
+        ref.invalidate(adminMetricsProvider);
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(

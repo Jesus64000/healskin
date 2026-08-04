@@ -1,0 +1,134 @@
+Esto fue enviado por el cliente 
+
+[3:06 a.m., 4/8/2026] ✨Mariana Sandrea✨: Hola Papa! Buenass
+¿Cómo estás? 
+
+Estuve revisando la aplicación no muy a profundidad, más que todo parcial, la seguiré revisando mejor mañana y cualquier otra cosa te la envío, pero pude notar que una gran parte de las correcciones que te había mandando hace tiempo no están hechas
+[3:07 a.m., 4/8/2026] ✨Mariana Sandrea✨: Jesús 
+
+Estuve observando que la aplicación no tiene el historial médico como tal, hay que integrarlo, la verdad no sabía cómo, así que, le pregunté a Gémini para que diera ideas sin tener que hacer un gran cambio estructural y me parece que no está mal,
+[3:07 a.m., 4/8/2026] ✨Mariana Sandrea✨: Analizando la arquitectura de la información actual y comparándola con el texto que tienes en tu proyecto ("una sección de historial médico digital donde se registre información relevante (procedimientos previos, tratamientos) para una evaluación y evolución por parte del médico"), efectivamente hay un vacío de datos que debes resolver en el flujo de pantallas.
+
+Actualmente, tienes las indicaciones médicas (recetas) separadas del historial de evolución de la Inteligencia Artificial. Para integrarlo todo de manera armónica sin romper el diseño tan bonito que ya lograste, aquí tienes la solución técnica paso a paso:
+
+---
+
+### 🛠️ Cómo adaptar las pantallas para cumplir con tu marco teórico
+
+#### 1. En la Pantalla de "Mis Citas e Indicaciones" (Primera Imagen)
+
+El problema actual es que el recuadro de *Limpieza Facial* solo muestra el procedimiento, pero no la orden médica completa.
+
+* *La Solución:* Transforma esa tarjeta en un elemento interactivo (un botón con funcionalidad tappable). Al hacer clic en la flecha de la derecha >, la aplicación debe abrir una nueva vista detallada o un despliegue inferior (Bottom Sheet) que contenga:
+* *Diagnóstico formal del Médico:* (Ej. Dermatitis seborreica o Disrupción de la barrera cutánea ).
+* *Tratamiento/Receta:* El listado exacto de productos indicados (Ej. Limpiador syndet, crema hidratante con ceramidas, fotoprotector SPF 50+ ).
+* *Frecuencia y Notas:* "Aplicar cada mañana tras limpiar el rostro. Evitar cosméticos no estandarizados ".
+
+
+* *A nivel de código/diseño:* Solo debes mantener el diseño actual y programar que al presionar la tarjeta se abra el "Detalle de la Indicación". Así cumples con la persistencia del tratamiento sin saturar la pantalla principal.
+
+#### 2. En la Pantalla de "Tu Evolución" (Segunda Imagen)
+
+Aquí se muestra el *Historial Clínico, pero actualmente **solo contiene el análisis automático de la IA* ("Análisis IA: Sospecha de Acné Moderado"). Metodológicamente, el diagnóstico de un algoritmo de IA siempre debe complementarse o validarse con el criterio del especialista humano.
+
+* *La Solución:* Dentro de esa misma línea de tiempo (debajo de la tarjeta de la IA), debes añadir las tarjetas de actualización del médico cuando asista a una consulta presencial o por telemedicina.
+* *Cómo estructurar el flujo de datos:*
+* *Hito 1 (Línea de tiempo):* 27 Jun, 2026 – Análisis IA: Sospecha de Acné Moderado (Confianza 80%).
+* *Hito 2 (Nuevo componente a integrar):* *29 Jun, 2026 – Diagnóstico Médico: Acné Vulgaris Confirmado por Dr. Alfonso Gutiérrez *. Al pulsar esta tarjeta, el sistema redirigirá al usuario directamente a la receta y al tratamiento correspondiente que describimos en el punto anterior.
+
+-----------
+(img1)(img2)
+Estás pantallas que te estoy pasando, son las que le di a la IA para que analizará, me pareció que alli es donde se podría complementar para el usuario
+
+----------
+(img3)
+En el medico si aparece algo así, como los campos que habría que anexarle al usuario para que pueda ver la información, lo único es que " Tratamientos y Procedimientos" debería decir solo procedimientos porque el Tratamiento está como tal en la parte del "Historial Médico" dónde dice "Receta Medica" la cual debería tener dos divisiones como Tópico y Via Oral o Tomado, y podrías hacerlo como el perfil del usuario con los datos demográficos (con la bolita que se activa y desactiva), en tal caso, de que quieras colocarlo aparte y sacarlo de esa sección, es válido, aunque alli mo me parece que este mal
+
+----------
+(img4)
+Estás son correcciones de los evaluadores. 
+
+El nombre no debe permitir colocar números, además, creo que debería indicar que coloque todos sus nombres y apellidos, porque acabo de ver un informe mío que me hizo la Doctora y los coloca así 
+
+La cédula debe permitir seleccionar si es extranjero o venezolano, además de estar delimitado porque permite colocar números al infinito, 
+
+Respecto al correo, quieren que cuando te logres registrar con éxito envié un correo de verificación 
+
+Antes de la contraseña debe haber una indicación que te diga como debes establecerla, básicamente, lo que te aparece cuando te equivocas. Que dice: mínimo 6 caracteres, letra mayúscula, minúsculas y al menos un caracter especial. Eso es lo que quieren que salga arriba y bueno, también cuando el usuario se equivoque, aparecerá el o los que les falte, el mensaje debe salir completo en ambos casos
+
+
+Men mencionaron que los datos que se llenan en el perfil del usuario (los demográficos) deberían de ser mencionados también aquí para que el usuario los llene de una vez o en su defecto que cuando inicie la aplicación aparezca una indicación en la pantalla principal de que deben llenarlos y dirigirlos allí
+
+Recuerda del aviso que hablamos ayer, debido a la corrección de Amnalys y lo de las horas y el reloj, que sea un solo formato para configurarlo y visualizarlo, cómo te he mencionado en ocasiones anteriores, me gusta un poco más el de AM, M y PM
+
+
+--------------
+(img5)
+Esto es lo del reporte clínico, aquí es donde ella me dijo que no salgan todos los analisis de la IA, solo el diagnóstico e indicaciones que de el médico, básicamente toda la información que el médico puede escribir del paciente en la aplicación.
+
+Y lo otro, es que si en dado caso no tiene una sola patología, si no dos, tres, entre otros. Se pueda seleccionar si se quiere una de ellas, dos o todas
+
+
+------------
+(img6)
+Ahh, este botón de eliminar, no elimina, es decir, dice que si, pero cuando revisas el medico o paciente sigue allí en la lista
+
+-------------
+(img7)
+Esto como tal no tiene un error, es solo que como puedes notar hay dos accesos directos a Mensajes, una de las correcciones que me hizo Estefany (cómo se escriba su nombre) es que solo deje una, que dejara el que está señalado con morado porque era más bonito y quitará el más pequeño, que es el que está señalado con verde
+
+
+-------------
+(img8)
+
+Igualmente, en la pantalla de los médicos, se deja el morado y se quita el verde
+
+
+No sé si sea en esa misma pantalla o en otra parte de la sección de citas, pero no aparece cuando el médico hace un bloqueo, y te deja realizar las citas, aunque, tenga activa esa opción por una cantidad de tiempo o todo el día, y no deberia, la aplicación deberia restringir en caso de ser así, e incluso, si de casualidad tenias una cita, debería enviar una notificación con disculpas, y una opción para reagendar
+
+
+
+Por cierto, debería de enviar una notificación o abuso cuando el médico responda al usuario y viceversa, tipo WhatsApp o algo así
+
+
+
+
+-----------
+(img9)
+Cuando presionas para ver las indicaciones de la clínica, no aparece el nombre de la clínica donde ella ve, ni la dirección de ese sitio, me parece que eso debe actualizarse acordé a lo ingresado, ya sea, que lo tome del perfil del médico o la Geo
+
+
+-----------
+(img10)
+
+El reloj con el teclado no funciona correctamente, en ninguno de los módulos donde está, hay que revisar, allí dice que no es válida la hora, creo que es porque en algunos lados aparece en formato AM-PM y en otro Militar
+
+
+-----------
+(img11)
+
+En esta foto me volví un desastre señalando, pero obviemos eso 😅
+
+Lo verde no está mal, funciona, pero no hay una forma de colocarlo un poquito más cerca para que el nombre y la indicación del producto se vea un poquito mejor 
+
+Lo morado, las alarmas siguen sin funcionar, ninguna de las tres, ni la de hora fija, predeterminada o escala
+
+
+---------
+(img12)
+
+Esto es del Admin, es una función nueva me imagino que deberías poder ver los escaneos de IA de los pacientes, pero no lo hace, no funciona
+
+
+-----------
+(img13)
+
+Lo de los cuestionarios del admin, creo que si guarda las preguntas
+
+Pero, hay que acomodar algunos enunciados cómo el que señale allí, no baja más la pantalla de ese límite, allí se ve como el teclado sale atravesado. 
+
+Super importante, no aparece el cuestionario que subo en la pantalla del usuario, imagino que debe aparecer como el de inicio ("Tipo de Piel") o un formato similar
+
+
+
+

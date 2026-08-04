@@ -54,9 +54,6 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
     super.dispose();
   }
 
-  bool _isValidDni(String val) {
-    return RegExp(r'^\d{5,8}$').hasMatch(val);
-  }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
@@ -199,6 +196,9 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
                           borderSide: const BorderSide(color: AppColors.danger),
                         ),
                       ),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]')),
+                      ],
                       validator: Validators.validateFullName,
                     ),
                     const SizedBox(height: 20),
@@ -215,7 +215,7 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
                       style: const TextStyle(fontSize: 14),
                       inputFormatters: [
                         FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(8),
+                        LengthLimitingTextInputFormatter(_dniPrefix == 'P' ? 10 : 8),
                       ],
                       decoration: InputDecoration(
                         hintText: "Ej. 24890312",
@@ -231,11 +231,16 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
                               value: _dniPrefix,
                               underline: const SizedBox(),
                               onChanged: (String? newValue) {
-                                setState(() {
-                                  _dniPrefix = newValue!;
-                                });
+                                if (newValue != null) {
+                                  setState(() {
+                                    _dniPrefix = newValue;
+                                    if (_dniPrefix != 'P' && _dniController.text.length > 8) {
+                                      _dniController.text = _dniController.text.substring(0, 8);
+                                    }
+                                  });
+                                }
                               },
-                              items: <String>['V', 'E'].map<DropdownMenuItem<String>>((String value) {
+                              items: <String>['V', 'E', 'J', 'P'].map<DropdownMenuItem<String>>((String value) {
                                 return DropdownMenuItem<String>(
                                   value: value,
                                   child: Text(value, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),

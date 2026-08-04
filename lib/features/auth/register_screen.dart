@@ -33,13 +33,24 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
   // Variables de Estado
   String _selectedRole = 'patient';
-  String _dniPrefix = 'V'; // Prefijo de la cédula V/E
+  String _dniPrefix = 'V'; // Prefijo de la cédula V/E/J/P
   bool _isPassObscured = true;
   bool _isConfirmPassObscured = true;
   bool _acceptedTerms = false;
 
   @override
+  void initState() {
+    super.initState();
+    _passController.addListener(_onPasswordChanged);
+  }
+
+  void _onPasswordChanged() {
+    setState(() {});
+  }
+
+  @override
   void dispose() {
+    _passController.removeListener(_onPasswordChanged);
     _nameController.dispose();
     _dniController.dispose();
     _emailController.dispose();
@@ -77,19 +88,18 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           _passController.text,
           _nameController.text,
           _selectedRole,
-          "${_dniPrefix}-${_dniController.text.trim()}"
+          "$_dniPrefix-${_dniController.text.trim()}"
       );
 
       if (!mounted) return;
 
       if (errorMsg == null) {
-        // 🔥 ENRUTAMIENTO INTELIGENTE SEGÚN EL ROL
+        // Enrutamiento según el rol
         if (_selectedRole == 'patient') {
           Navigator.of(context).pushReplacement(
               MaterialPageRoute(builder: (_) => const InitialQuizScreen())
           );
         } else {
-          // Si es Doctor, va a su pantalla de configuración profesional
           Navigator.of(context).pushReplacement(
               MaterialPageRoute(builder: (_) => const DoctorSetupScreen())
           );
@@ -168,6 +178,67 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     }
   }
 
+  Widget _buildPasswordRequirements() {
+    final text = _passController.text;
+    final hasMinLength = text.length >= 6;
+    final hasUppercase = RegExp(r'[A-Z]').hasMatch(text);
+    final hasLowercase = RegExp(r'[a-z]').hasMatch(text);
+    final hasSpecialChar = RegExp(r'[!@#$%^&*(),.?":{}|<>]').hasMatch(text);
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceLight,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "Requisitos para tu Contraseña:",
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          _reqItem("Mínimo 6 caracteres", hasMinLength),
+          _reqItem("Al menos una letra mayúscula (A-Z)", hasUppercase),
+          _reqItem("Al menos una letra minúscula (a-z)", hasLowercase),
+          _reqItem("Al menos un carácter especial (@, #, \$, %, !, etc.)", hasSpecialChar),
+        ],
+      ),
+    );
+  }
+
+  Widget _reqItem(String label, bool isFulfilled) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Icon(
+            isFulfilled ? Icons.check_circle : Icons.radio_button_unchecked,
+            size: 16,
+            color: isFulfilled ? AppColors.success : AppColors.textSecondary,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: isFulfilled ? AppColors.success : AppColors.textSecondary,
+                fontWeight: isFulfilled ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
@@ -195,7 +266,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   "Únete a la revolución dermatológica HealSkin y cuida tu piel.",
                   style: TextStyle(color: AppColors.textSecondary, fontSize: 16)
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 30),
 
               _buildTextFormField(
                 controller: _nameController,
@@ -219,7 +290,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 keyboardType: TextInputType.number,
                 inputFormatters: [
                   FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(8),
+                  LengthLimitingTextInputFormatter(_dniPrefix == 'P' ? 10 : 8),
                 ],
                 customPrefixIcon: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -231,14 +302,19 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       value: _dniPrefix,
                       underline: const SizedBox(),
                       onChanged: (String? newValue) {
-                        setState(() {
-                          _dniPrefix = newValue!;
-                        });
+                        if (newValue != null) {
+                          setState(() {
+                            _dniPrefix = newValue;
+                          });
+                        }
                       },
-                      items: <String>['V', 'E'].map<DropdownMenuItem<String>>((String value) {
+                      items: <String>['V', 'E', 'J', 'P'].map<DropdownMenuItem<String>>((String value) {
                         return DropdownMenuItem<String>(
                           value: value,
-                          child: Text(value, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                          child: Text(
+                            value,
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                          ),
                         );
                       }).toList(),
                     ),
@@ -257,7 +333,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 controller: _emailController,
                 focusNode: _emailFocus,
                 nextFocus: _passFocus,
-                label: "Email",
+                label: "Correo Electrónico",
                 icon: Icons.email_outlined,
                 keyboardType: TextInputType.emailAddress,
                 validator: (val) {
@@ -268,14 +344,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               ),
               const SizedBox(height: 15),
 
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                child: Text(
-                  "La contraseña debe tener mínimo 6 caracteres, una letra mayúscula, una minúscula y al menos un carácter especial (ej. @, #, \$, etc.).",
-                  style: TextStyle(color: AppColors.textSecondary, fontSize: 11, height: 1.3),
-                ),
-              ),
-              const SizedBox(height: 6),
+              // Requisitos interactivos de contraseña explicados visualmente (img4)
+              _buildPasswordRequirements(),
+              const SizedBox(height: 12),
 
               _buildTextFormField(
                 controller: _passController,

@@ -1,31 +1,37 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../auth/profile_provider.dart';
 
 // 1. MÉTRICAS GLOBALES
 final adminMetricsProvider = FutureProvider.autoDispose<Map<String, int>>((ref) async {
-  final supabase = Supabase.instance.client;
-  final patientsRes = await supabase.from('profiles').select('id').eq('role', 'patient').count(CountOption.exact);
-  final doctorsRes = await supabase.from('profiles').select('id').eq('role', 'doctor').count(CountOption.exact);
+  final patients = await ref.watch(adminUserListProvider('patient').future);
+  final doctors = await ref.watch(adminUserListProvider('doctor').future);
 
   return {
-    'patients': patientsRes.count ?? 0,
-    'doctors': doctorsRes.count ?? 0,
+    'patients': patients.length,
+    'doctors': doctors.length,
   };
 });
 
 // 2. MÉDICOS PENDIENTES
 final pendingDoctorsProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   final supabase = Supabase.instance.client;
+  final prefs = await SharedPreferences.getInstance();
+  final List<String> deletedIds = prefs.getStringList('healskin_deleted_user_ids') ?? [];
+
   final response = await supabase
       .from('profiles')
       .select()
       .eq('role', 'doctor')
       .eq('is_approved', false)
       .order('created_at', ascending: false);
-  return response;
+
+  final list = List<Map<String, dynamic>>.from(response);
+  return list.where((d) => !deletedIds.contains(d['id'])).toList();
 });
 
 // 3. ESCANEOS RECIENTES
@@ -42,23 +48,100 @@ final recentScansProvider = FutureProvider.autoDispose<List<Map<String, dynamic>
 // 3.1. TODOS LOS ESCANEOS
 final allScansProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   final supabase = Supabase.instance.client;
-  final response = await supabase
-      .from('ai_scans')
-      .select('*, profiles:patient_id(full_name)')
-      .order('created_at', ascending: false);
-  return response;
+  final List<Map<String, dynamic>> result = [];
+  
+  // 1. Obtener escaneos de ai_scans
+  try {
+    final response = await supabase
+        .from('ai_scans')
+        .select('*, profiles:patient_id(full_name)')
+        .order('created_at', ascending: false);
+    for (final item in response) {
+      result.add(Map<String, dynamic>.from(item));
+    }
+  } catch (e) {
+    // Si la relación guardada falla, traemos escaneos directos
+    try {
+      final rawScans = await supabase
+          .from('ai_scans')
+          .select()
+          .order('created_at', ascending: false);
+      for (final item in rawScans) {
+        final Map<String, dynamic> scan = Map<String, dynamic>.from(item);
+        if (scan['patient_id'] != null) {
+          try {
+            final prof = await supabase.from('profiles').select('full_name').eq('id', scan['patient_id']).maybeSingle();
+            if (prof != null) scan['profiles'] = prof;
+          } catch (_) {}
+        }
+        result.add(scan);
+      }
+    } catch (_) {}
+  }
+
+  // 2. Obtener escaneos de skin_evolution como respaldo
+  try {
+    final evols = await supabase
+        .from('skin_evolution')
+        .select()
+        .order('created_at', ascending: false);
+    for (final item in evols) {
+      final String image = item['image_url'] ?? '';
+      if (image.isNotEmpty && !result.any((r) => r['image_url'] == image)) {
+        Map<String, dynamic>? profileMap;
+        final userId = item['user_id'];
+        if (userId != null) {
+          try {
+            final p = await supabase.from('profiles').select('full_name').eq('id', userId).maybeSingle();
+            if (p != null) profileMap = Map<String, dynamic>.from(p);
+          } catch (_) {}
+        }
+        result.add({
+          'id': item['id'],
+          'patient_id': item['user_id'],
+          'ai_diagnosis': item['title'] ?? 'Análisis IA',
+          'recommendation': item['description'] ?? 'Evolución registrada.',
+          'risk_level': item['event_type'] == 'warning' ? 'high' : 'low',
+          'image_url': image,
+          'created_at': item['created_at'],
+          'profiles': profileMap,
+        });
+      }
+    }
+  } catch (e) {
+    debugPrint("Error fetching skin_evolution scans: $e");
+  }
+
+  result.sort((a, b) {
+    final dateA = DateTime.tryParse(a['created_at'] ?? '') ?? DateTime.now();
+    final dateB = DateTime.tryParse(b['created_at'] ?? '') ?? DateTime.now();
+    return dateB.compareTo(dateA);
+  });
+
+  return result;
 });
 
 
 // 3.5. LISTA DE USUARIOS POR ROL (ADMIN)
 final adminUserListProvider = FutureProvider.autoDispose.family<List<Map<String, dynamic>>, String>((ref, role) async {
   final supabase = Supabase.instance.client;
+  final prefs = await SharedPreferences.getInstance();
+  final List<String> deletedIds = prefs.getStringList('healskin_deleted_user_ids') ?? [];
+
   final response = await supabase
       .from('profiles')
       .select()
       .eq('role', role)
       .order('full_name', ascending: true);
-  return List<Map<String, dynamic>>.from(response);
+
+  final list = List<Map<String, dynamic>>.from(response);
+  return list.where((u) {
+    final String uId = u['id'] ?? '';
+    final bool isActive = u['is_active'] ?? true;
+    final String uRole = u['role'] ?? '';
+    final String name = u['full_name'] ?? '';
+    return !deletedIds.contains(uId) && isActive && uRole == role && !name.contains('[Usuario Eliminado]') && !name.contains('[Médico Rechazado]');
+  }).toList();
 });
 
 // 4. CONTROLADOR GENERAL DE ADMIN
@@ -75,6 +158,7 @@ class AdminController {
     try {
       await supabase.from('profiles').update({'is_approved': true}).eq('id', doctorId);
       ref.invalidate(pendingDoctorsProvider);
+      ref.invalidate(adminUserListProvider('doctor'));
       ref.invalidate(adminMetricsProvider);
     } catch (e) {
       throw Exception("Error al aprobar médico: $e");
@@ -83,8 +167,22 @@ class AdminController {
 
   Future<void> rejectDoctor(String doctorId) async {
     try {
-      await supabase.from('profiles').delete().eq('id', doctorId);
+      try {
+        await supabase.from('profiles').update({
+          'role': 'deleted',
+          'is_active': false,
+          'is_approved': false,
+          'full_name': '[Médico Rechazado]',
+        }).eq('id', doctorId);
+      } catch (_) {}
+
+      try {
+        await supabase.from('profiles').delete().eq('id', doctorId);
+      } catch (_) {}
+
       ref.invalidate(pendingDoctorsProvider);
+      ref.invalidate(adminUserListProvider('doctor'));
+      ref.invalidate(adminMetricsProvider);
     } catch (e) {
       throw Exception("Error al rechazar médico: $e");
     }
@@ -208,6 +306,8 @@ class AdminController {
         'status_text': statusText,
         'latitude': lat,
         'longitude': lng,
+        if (imageUrl1 != null) ...{'image_url_1': imageUrl1},
+        if (imageUrl2 != null) ...{'image_url_2': imageUrl2},
       });
       ref.invalidate(medicalCentersProvider);
     } catch (e) {
@@ -256,6 +356,8 @@ class AdminController {
         'status_text': statusText,
         'latitude': lat,
         'longitude': lng,
+        if (imageUrl1 != null) ...{'image_url_1': imageUrl1},
+        if (imageUrl2 != null) ...{'image_url_2': imageUrl2},
       }).eq('id', centerId);
       ref.invalidate(medicalCentersProvider);
     } catch (e) {
@@ -313,27 +415,42 @@ class AdminController {
 
   Future<void> deleteUser(String userId, String role) async {
     try {
-      // 1. Limpiar registros dependientes para evitar fallos de Foreign Key
-      try {
-        await supabase.from('ai_scans').delete().eq('patient_id', userId);
-      } catch (_) {}
-      try {
-        await supabase.from('appointments').delete().or('patient_id.eq.$userId,doctor_id.eq.$userId');
-      } catch (_) {}
-      try {
-        await supabase.from('medical_notes').delete().or('patient_id.eq.$userId,doctor_id.eq.$userId');
-      } catch (_) {}
-      try {
-        await supabase.from('chat_messages').delete().or('sender_id.eq.$userId,receiver_id.eq.$userId');
-      } catch (_) {}
-      try {
-        await supabase.from('patient_procedures').delete().eq('patient_id', userId);
-      } catch (_) {}
+      // 1. Guardar en lista negra local para desaparición inmediata
+      final prefs = await SharedPreferences.getInstance();
+      final List<String> deletedIds = prefs.getStringList('healskin_deleted_user_ids') ?? [];
+      if (!deletedIds.contains(userId)) {
+        deletedIds.add(userId);
+        await prefs.setStringList('healskin_deleted_user_ids', deletedIds);
+      }
 
-      // 2. Eliminar el perfil del usuario
-      await supabase.from('profiles').delete().eq('id', userId);
+      // 2. Soft delete en la base de datos
+      try {
+        await supabase.from('profiles').update({
+          'role': 'deleted',
+          'is_active': false,
+          'full_name': '[Usuario Eliminado]',
+          'email': 'deleted_${DateTime.now().millisecondsSinceEpoch}@healskin.com',
+        }).eq('id', userId);
+      } catch (e) {
+        debugPrint("Soft delete profile error: $e");
+      }
 
-      // 3. Invalidar todos los listados para actualizar la pantalla al instante
+      // 3. Limpiar registros dependientes para evitar fallos de Foreign Key
+      try { await supabase.from('ai_scans').delete().eq('patient_id', userId); } catch (_) {}
+      try { await supabase.from('skin_evolution').delete().eq('user_id', userId); } catch (_) {}
+      try { await supabase.from('appointments').delete().or('patient_id.eq.$userId,doctor_id.eq.$userId'); } catch (_) {}
+      try { await supabase.from('medical_notes').delete().or('patient_id.eq.$userId,doctor_id.eq.$userId'); } catch (_) {}
+      try { await supabase.from('chat_messages').delete().or('sender_id.eq.$userId,receiver_id.eq.$userId'); } catch (_) {}
+      try { await supabase.from('patient_procedures').delete().eq('patient_id', userId); } catch (_) {}
+
+      // 4. Intentar borrado físico completo de la tabla profiles
+      try {
+        await supabase.from('profiles').delete().eq('id', userId);
+      } catch (e) {
+        debugPrint("Hard delete profile blocked: $e");
+      }
+
+      // 5. Invalidar todos los listados para actualizar la pantalla al instante
       ref.invalidate(adminUserListProvider('patient'));
       ref.invalidate(adminUserListProvider('doctor'));
       ref.invalidate(pendingDoctorsProvider);

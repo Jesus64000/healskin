@@ -3,28 +3,29 @@ class Validators {
   /// no contenga números, e incluya al menos un espacio (nombres y apellidos).
   static String? validateFullName(String? val) {
     if (val == null || val.trim().isEmpty) {
-      return "Ingresa tu nombre completo";
+      return "Por favor, ingresa tu nombre completo";
     }
-    if (val.trim().length < 3) {
+    final cleanVal = val.trim();
+    if (cleanVal.length < 3) {
       return "El nombre debe tener al menos 3 caracteres";
     }
-    if (RegExp(r'[0-9]').hasMatch(val)) {
+    if (RegExp(r'[0-9]').hasMatch(cleanVal)) {
       return "El nombre no debe contener números";
     }
-    if (!val.trim().contains(' ')) {
-      return "Por favor, ingresa tus nombres y apellidos completos";
+    if (!cleanVal.contains(' ')) {
+      return "Ingresa tus nombres y apellidos completos (Ej: Juan Pérez)";
     }
     return null;
   }
 
-  /// Valida que la cédula (sin el prefijo) tenga entre 5 y 8 caracteres de solo números.
+  /// Valida que la cédula (sin el prefijo) tenga entre 5 y 10 dígitos.
   static String? validateDni(String? val) {
     if (val == null || val.trim().isEmpty) {
-      return "Ingresa tu cédula o documento";
+      return "Ingresa tu cédula o documento de identidad";
     }
     final cleanVal = val.trim();
-    if (cleanVal.length < 5 || cleanVal.length > 8) {
-      return "La cédula debe tener entre 5 y 8 dígitos";
+    if (cleanVal.length < 5 || cleanVal.length > 10) {
+      return "El documento debe tener entre 5 y 10 dígitos";
     }
     return null;
   }

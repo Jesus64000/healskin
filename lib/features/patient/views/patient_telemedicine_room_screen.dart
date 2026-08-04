@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'; // 🚀 IMPORTADO PARA TOKENS DINÁMICOS
 import '../../../core/theme/app_colors.dart';
 import '../../../core/services/telemedicine_service.dart'; // ⚠️ Ajusta la ruta

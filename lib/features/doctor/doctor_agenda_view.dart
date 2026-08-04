@@ -529,7 +529,7 @@ class _BlockHourBottomSheetState extends ConsumerState<_BlockHourBottomSheet> {
             ),
           ),
           child: MediaQuery(
-            data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+            data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
             child: child!,
           ),
         );
@@ -664,7 +664,7 @@ class _BlockHourBottomSheetState extends ConsumerState<_BlockHourBottomSheet> {
                           ),
                         ),
                         child: MediaQuery(
-                          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+                          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
                           child: child!,
                         ),
                       );
