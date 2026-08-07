@@ -65,16 +65,28 @@ class AdminDashboard extends ConsumerWidget {
                     const SizedBox(height: 30),
 
                     // 🤖 Auditoría IA (Últimos Escaneos)
-                    const Text(
-                      "Auditoría IA (Últimos Escaneos)",
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          "Auditoría IA (Últimos Escaneos)",
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const AdminScansHistoryScreen()),
+                          ),
+                          child: const Text("Ver Todo →", style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13)),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 15),
-                    _buildRecentScansSection(ref),
+                    const SizedBox(height: 10),
+                    _buildRecentScansSection(context, ref),
                     const SizedBox(height: 35),
                   ],
                 ),
@@ -428,7 +440,7 @@ class AdminDashboard extends ConsumerWidget {
     );
   }
 
-  Widget _buildRecentScansSection(WidgetRef ref) {
+  Widget _buildRecentScansSection(BuildContext context, WidgetRef ref) {
     final scansAsync = ref.watch(recentScansProvider);
 
     return scansAsync.when(
@@ -475,54 +487,93 @@ class AdminDashboard extends ConsumerWidget {
                   rawRisk.contains('urgent') ||
                   rawRisk.contains('alto') ||
                   rawRisk.contains('urgente');
+              final isMedium = rawRisk.contains('medium') || rawRisk.contains('medio');
+              final imageUrl = scan['image_url'] as String?;
 
               return Column(
                 children: [
-                  ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                    leading: Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceLight,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(Icons.document_scanner_rounded, color: AppColors.primary),
-                    ),
-                    title: Text(
-                      patientName,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    subtitle: Text(
-                      "${scan['ai_diagnosis']} • $date",
-                      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                    ),
-                    trailing: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: isRisk
-                            ? AppColors.danger.withValues(alpha: 0.1)
-                            : AppColors.success.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        isRisk ? "ALTO RIESGO" : "NORMAL",
-                        style: TextStyle(
-                          color: isRisk ? AppColors.danger : AppColors.success,
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                        ),
+                  InkWell(
+                    onTap: () {
+                      _showScanDetailModal(context, scan);
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                      child: Row(
+                        children: [
+                          if (imageUrl != null && imageUrl.isNotEmpty)
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.network(
+                                imageUrl,
+                                width: 46,
+                                height: 46,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) => Container(
+                                  width: 46, height: 46,
+                                  color: AppColors.surfaceLight,
+                                  child: const Icon(Icons.document_scanner_rounded, color: AppColors.primary),
+                                ),
+                              ),
+                            )
+                          else
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: AppColors.surfaceLight,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(Icons.document_scanner_rounded, color: AppColors.primary),
+                            ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  patientName,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  "${scan['ai_diagnosis'] ?? 'Análisis IA'} • $date",
+                                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: isRisk
+                                  ? AppColors.danger.withValues(alpha: 0.1)
+                                  : isMedium
+                                      ? Colors.orange.withValues(alpha: 0.1)
+                                      : AppColors.success.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              isRisk ? "ALTO RIESGO" : isMedium ? "RIESGO MEDIO" : "NORMAL",
+                              style: TextStyle(
+                                color: isRisk ? AppColors.danger : isMedium ? Colors.orange.shade800 : AppColors.success,
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
                   if (scan != scans.last)
-                    const Divider(
-                      height: 10,
-                      indent: 60,
-                    ),
+                    const Divider(height: 10, indent: 60),
                 ],
               );
             }).toList(),
@@ -534,6 +585,89 @@ class AdminDashboard extends ConsumerWidget {
         child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
       ),
       error: (e, _) => Center(child: Text("Error: $e")),
+    );
+  }
+
+  void _showScanDetailModal(BuildContext context, Map<String, dynamic> scan) {
+    final patientName = scan['profiles']?['full_name'] ?? 'Paciente';
+    final date = scan['created_at'] != null
+        ? DateFormat('dd MMMM yyyy, hh:mm a', 'es').format(DateTime.parse(scan['created_at']).toLocal())
+        : 'Fecha desc.';
+    final diagnosis = scan['ai_diagnosis'] ?? 'Sin diagnóstico';
+    final recommendation = scan['recommendation'] ?? 'Sin recomendaciones registradas.';
+    final imageUrl = scan['image_url'] as String?;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.only(
+            top: 20, left: 20, right: 20,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40, height: 4,
+                  decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+              const SizedBox(height: 15),
+              Text("Auditoría de Escaneo IA", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+              Text("Paciente: $patientName • $date", style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+              const Divider(height: 24),
+              if (imageUrl != null && imageUrl.isNotEmpty) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.network(
+                    imageUrl,
+                    width: double.infinity,
+                    height: 180,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      height: 120, color: AppColors.surfaceLight,
+                      child: const Center(child: Icon(Icons.broken_image, size: 40, color: AppColors.textSecondary)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 15),
+              ],
+              const Text("Diagnóstico IA", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textSecondary)),
+              const SizedBox(height: 4),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: AppColors.surfaceLight, borderRadius: BorderRadius.circular(12)),
+                child: Text(diagnosis, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textPrimary)),
+              ),
+              const SizedBox(height: 12),
+              const Text("Recomendaciones", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textSecondary)),
+              const SizedBox(height: 4),
+              Text(recommendation, style: const TextStyle(fontSize: 13, color: AppColors.textPrimary, height: 1.4)),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text("Cerrar Auditoría", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

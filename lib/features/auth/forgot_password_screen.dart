@@ -50,12 +50,12 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
               ),
             ),
             content: const Text(
-              "Hemos enviado un enlace de recuperación a tu correo electrónico. Por favor, revisa tu bandeja de entrada y sigue las instrucciones para restablecer tu contraseña.",
-              textAlign: TextAlign.center,
+              "¡Hola! Hemos enviado un enlace de recuperación a tu correo electrónico. Por favor, revisa tu bandeja de entrada y sigue las instrucciones para restablecer tu contraseña.",
+              textAlign: TextAlign.justify,
               style: TextStyle(
                 color: AppColors.textSecondary,
                 fontSize: 14,
-                height: 1.4,
+                height: 1.5,
               ),
             ),
             actionsAlignment: MainAxisAlignment.center,
@@ -108,39 +108,42 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 20),
+                const SizedBox(height: 15),
                 Center(
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: const BoxDecoration(
-                      color: AppColors.surfaceDark,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.lock_reset_outlined,
-                      size: 64,
-                      color: AppColors.primary,
-                    ),
+                  child: Image.asset(
+                    'imagenes/logo_sin_fondo.png',
+                    height: 90,
+                    fit: BoxFit.contain,
                   ),
                 ),
-                const SizedBox(height: 30),
-                const Text(
-                  "¿Olvidaste tu contraseña?",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                  ),
+                const SizedBox(height: 25),
+                const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.lock_reset_outlined, color: AppColors.primary, size: 26),
+                    SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        "Recuperación de Clave",
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
                 const Text(
-                  "Introduce tu dirección de correo electrónico a continuación y te enviaremos un enlace para restablecer tu contraseña de forma segura.",
-                  textAlign: TextAlign.center,
+                  "¡Hola! Introduce tu dirección de correo electrónico a continuación y te enviaremos un enlace seguro para restablecer tu contraseña.",
+                  textAlign: TextAlign.justify,
                   style: TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 14,
-                    height: 1.4,
+                    height: 1.5,
                   ),
                 ),
                 const SizedBox(height: 40),

@@ -51,7 +51,8 @@ class ChatNotificationListener {
           if (createdAtStr != null) {
             try {
               final createdAt = DateTime.parse(createdAtStr).toLocal();
-              if (createdAt.isBefore(_startTime.subtract(const Duration(seconds: 10)))) {
+              // Permitir mensajes recientes dentro del margen de tolerancia (5 minutos)
+              if (createdAt.isBefore(_startTime.subtract(const Duration(minutes: 5)))) {
                 return;
               }
             } catch (_) {}

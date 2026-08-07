@@ -207,7 +207,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           _reqItem("Mínimo 6 caracteres", hasMinLength),
           _reqItem("Al menos una letra mayúscula (A-Z)", hasUppercase),
           _reqItem("Al menos una letra minúscula (a-z)", hasLowercase),
-          _reqItem("Al menos un carácter especial (@, #, \$, %, !, etc.)", hasSpecialChar),
+          _reqItem("Al menos un carácter especial (@, #, \$, %, !, entre otros)", hasSpecialChar),
         ],
       ),
     );
@@ -290,7 +290,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 keyboardType: TextInputType.number,
                 inputFormatters: [
                   FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(_dniPrefix == 'P' ? 10 : 8),
+                  LengthLimitingTextInputFormatter(_dniPrefix == 'P' ? 10 : (_dniPrefix == 'J' ? 9 : 8)),
                 ],
                 customPrefixIcon: Row(
                   mainAxisSize: MainAxisSize.min,

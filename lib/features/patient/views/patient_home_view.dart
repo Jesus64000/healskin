@@ -14,6 +14,7 @@ import '../../chat/chat_inbox_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'dynamic_quiz_screen.dart';
+import '../../../core/widgets/personal_use_disclaimer_dialog.dart';
 
 class PatientHomeView extends ConsumerStatefulWidget {
   const PatientHomeView({super.key});
@@ -30,6 +31,9 @@ class _PatientHomeViewState extends ConsumerState<PatientHomeView> {
   void initState() {
     super.initState();
     _loadCustomQuizzes();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      PersonalUseDisclaimerDialog.showIfNeeded(context);
+    });
   }
 
   Future<void> _loadCustomQuizzes() async {
@@ -121,7 +125,13 @@ class _PatientHomeViewState extends ConsumerState<PatientHomeView> {
                           ],
                         ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 6),
+                      IconButton(
+                        onPressed: () => PersonalUseDisclaimerDialog.show(context),
+                        tooltip: "Aviso de uso personal",
+                        icon: const Icon(Icons.shield_outlined, color: AppColors.primary, size: 22),
+                      ),
+                      const SizedBox(width: 4),
                       InkWell(
                         onTap: () {
                           Navigator.push(
@@ -164,6 +174,49 @@ class _PatientHomeViewState extends ConsumerState<PatientHomeView> {
                   ),
                 ),
 
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 20.0, right: 20.0, top: 8.0, bottom: 2.0),
+                  child: InkWell(
+                    onTap: () => PersonalUseDisclaimerDialog.show(context),
+                    borderRadius: BorderRadius.circular(14),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.verified_user_outlined, color: AppColors.primary, size: 20),
+                          const SizedBox(width: 10),
+                          const Expanded(
+                            child: Text(
+                              "Cuenta de uso personal e individual. Haz clic para ver aviso médico.",
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                          const Text(
+                            "Ver aviso",
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primary,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
               if (missingDemographics)
                 SliverToBoxAdapter(
                   child: Padding(
@@ -190,7 +243,7 @@ class _PatientHomeViewState extends ConsumerState<PatientHomeView> {
                           onTap: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (_) => const PatientProfileView()),
+                              MaterialPageRoute(builder: (_) => const PatientProfileView(autoOpenEditModal: true)),
                             );
                           },
                           borderRadius: BorderRadius.circular(20),
@@ -208,7 +261,7 @@ class _PatientHomeViewState extends ConsumerState<PatientHomeView> {
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        "Completa tu perfil demográfico",
+                                        "Completa tu Perfil",
                                         style: TextStyle(
                                           color: Colors.white,
                                           fontWeight: FontWeight.bold,
@@ -300,11 +353,18 @@ class _PatientHomeViewState extends ConsumerState<PatientHomeView> {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text("Para tu piel $skinType",
+                                  Text("Para tu piel ${_getGrammaticalSkinType(skinType)}",
                                       style: const TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)
                                   ),
                                   InkWell(
-                                    onTap: _showComingSoon,
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => SkincareProductsScreen(userSkinType: skinType),
+                                        ),
+                                      );
+                                    },
                                     child: const Text("Ver todos", style: TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.bold)),
                                   ),
                                 ],
@@ -649,6 +709,16 @@ class _PatientHomeViewState extends ConsumerState<PatientHomeView> {
         ),
       ],
     );
+  }
+
+  String _getGrammaticalSkinType(String skinType) {
+    final lower = skinType.toLowerCase().trim();
+    if (lower.contains('gras')) return 'Grasa';
+    if (lower.contains('sec')) return 'Seca';
+    if (lower.contains('mixt')) return 'Mixta';
+    if (lower.contains('sensib')) return 'Sensible';
+    if (lower.contains('norm')) return 'Normal';
+    return skinType;
   }
 
   String _getSkinTypeLabel(String skinValue) {

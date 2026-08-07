@@ -14,7 +14,8 @@ class ClinicalPdfService {
 
     final String fullName = profile['full_name'] ?? 'Paciente Desconocido';
     final String idCard = profile['identification_id'] ?? 'No registrada';
-    final String skinType = (profile['skin_type']?.toString().toUpperCase() ?? 'NO DEFINIDO');
+    final String rawSkinType = (profile['skin_type']?.toString().toUpperCase() ?? 'NO DEFINIDO').trim();
+    final String skinType = (rawSkinType == 'GRASO' || rawSkinType == 'PIEL GRASO') ? 'GRASA' : rawSkinType;
     final String age = profile['age']?.toString() ?? 'No registrada';
     final String gender = profile['gender'] ?? 'No especificado';
     final String allergies = profile['allergies'] ?? 'Ninguna';

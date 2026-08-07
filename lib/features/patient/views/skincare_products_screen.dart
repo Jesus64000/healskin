@@ -5,7 +5,8 @@ import '../../auth/profile_provider.dart';
 import 'patient_home_view.dart';
 
 class SkincareProductsScreen extends ConsumerWidget {
-  const SkincareProductsScreen({super.key});
+  final String? userSkinType;
+  const SkincareProductsScreen({super.key, this.userSkinType});
 
   List<Map<String, dynamic>> _getRoutineSteps(String skinType) {
     final normalized = skinType.toLowerCase().trim();
@@ -226,7 +227,7 @@ class SkincareProductsScreen extends ConsumerWidget {
       ),
       body: profileAsync.when(
         data: (profile) {
-          final skinType = profile?['skin_type'] ?? "en evaluación";
+          final skinType = userSkinType ?? profile?['skin_type'] ?? "en evaluación";
           final steps = _getRoutineSteps(skinType);
 
           return articlesAsync.when(

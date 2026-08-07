@@ -36,13 +36,8 @@ final pendingDoctorsProvider = FutureProvider.autoDispose<List<Map<String, dynam
 
 // 3. ESCANEOS RECIENTES
 final recentScansProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  final supabase = Supabase.instance.client;
-  final response = await supabase
-      .from('ai_scans')
-      .select('*, profiles:patient_id(full_name)')
-      .order('created_at', ascending: false)
-      .limit(10);
-  return response;
+  final allScans = await ref.watch(allScansProvider.future);
+  return allScans.take(5).toList();
 });
 
 // 3.1. TODOS LOS ESCANEOS
@@ -415,7 +410,24 @@ class AdminController {
 
   Future<void> deleteUser(String userId, String role) async {
     try {
-      // 1. Guardar en lista negra local para desaparición inmediata
+      // 1. Invocar RPC en Supabase para borrado físico de auth.users y profiles
+      try {
+        await supabase.rpc('delete_user_by_admin', params: {'target_user_id': userId});
+      } catch (e) {
+        debugPrint("RPC delete_user_by_admin notice/fallback: $e");
+      }
+
+      // 2. Limpieza de registros dependientes por respaldo
+      try { await supabase.from('ai_scans').delete().eq('patient_id', userId); } catch (_) {}
+      try { await supabase.from('skin_evolution').delete().eq('user_id', userId); } catch (_) {}
+      try { await supabase.from('appointments').delete().or('patient_id.eq.$userId,doctor_id.eq.$userId'); } catch (_) {}
+      try { await supabase.from('medical_notes').delete().or('patient_id.eq.$userId,doctor_id.eq.$userId'); } catch (_) {}
+      try { await supabase.from('direct_messages').delete().or('sender_id.eq.$userId,receiver_id.eq.$userId'); } catch (_) {}
+      try { await supabase.from('chat_messages').delete().or('sender_id.eq.$userId,receiver_id.eq.$userId'); } catch (_) {}
+      try { await supabase.from('patient_procedures').delete().eq('patient_id', userId); } catch (_) {}
+      try { await supabase.from('profiles').delete().eq('id', userId); } catch (_) {}
+
+      // 3. Guardar en lista local de filtrado para actualización inmediata
       final prefs = await SharedPreferences.getInstance();
       final List<String> deletedIds = prefs.getStringList('healskin_deleted_user_ids') ?? [];
       if (!deletedIds.contains(userId)) {
@@ -423,34 +435,7 @@ class AdminController {
         await prefs.setStringList('healskin_deleted_user_ids', deletedIds);
       }
 
-      // 2. Soft delete en la base de datos
-      try {
-        await supabase.from('profiles').update({
-          'role': 'deleted',
-          'is_active': false,
-          'full_name': '[Usuario Eliminado]',
-          'email': 'deleted_${DateTime.now().millisecondsSinceEpoch}@healskin.com',
-        }).eq('id', userId);
-      } catch (e) {
-        debugPrint("Soft delete profile error: $e");
-      }
-
-      // 3. Limpiar registros dependientes para evitar fallos de Foreign Key
-      try { await supabase.from('ai_scans').delete().eq('patient_id', userId); } catch (_) {}
-      try { await supabase.from('skin_evolution').delete().eq('user_id', userId); } catch (_) {}
-      try { await supabase.from('appointments').delete().or('patient_id.eq.$userId,doctor_id.eq.$userId'); } catch (_) {}
-      try { await supabase.from('medical_notes').delete().or('patient_id.eq.$userId,doctor_id.eq.$userId'); } catch (_) {}
-      try { await supabase.from('chat_messages').delete().or('sender_id.eq.$userId,receiver_id.eq.$userId'); } catch (_) {}
-      try { await supabase.from('patient_procedures').delete().eq('patient_id', userId); } catch (_) {}
-
-      // 4. Intentar borrado físico completo de la tabla profiles
-      try {
-        await supabase.from('profiles').delete().eq('id', userId);
-      } catch (e) {
-        debugPrint("Hard delete profile blocked: $e");
-      }
-
-      // 5. Invalidar todos los listados para actualizar la pantalla al instante
+      // 4. Invalidar todos los listados para actualizar la pantalla al instante
       ref.invalidate(adminUserListProvider('patient'));
       ref.invalidate(adminUserListProvider('doctor'));
       ref.invalidate(pendingDoctorsProvider);

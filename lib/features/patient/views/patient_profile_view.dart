@@ -12,9 +12,11 @@ import '../../auth/initial_quiz_screen.dart';
 import '../../auth/login_screen.dart';
 import 'patient_reminders_view.dart';
 import '../../../core/services/notification_service.dart';
+import '../../../core/widgets/personal_use_disclaimer_dialog.dart';
 
 class PatientProfileView extends ConsumerStatefulWidget {
-  const PatientProfileView({super.key});
+  final bool autoOpenEditModal;
+  const PatientProfileView({super.key, this.autoOpenEditModal = false});
 
   @override
   ConsumerState<PatientProfileView> createState() => _PatientProfileViewState();
@@ -24,6 +26,19 @@ class _PatientProfileViewState extends ConsumerState<PatientProfileView> {
   bool _isUploadingAvatar = false;
   bool _isSavingName = false;
   bool _notificationsEnabled = true;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.autoOpenEditModal) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        final profile = await ref.read(userProfileProvider.future);
+        if (profile != null && mounted) {
+          _showEditProfileModal(profile);
+        }
+      });
+    }
+  }
 
   // --- 📸 CAPTURA Y SUBIDA DE FOTO DE PERFIL A STORAGE ---
   Future<void> _updateAvatar() async {
@@ -702,7 +717,7 @@ class _PatientProfileViewState extends ConsumerState<PatientProfileView> {
                   final String skinTypeRaw = profile?['skin_type'] ?? 'normal';
                   
                   // Formateo visual del tipo de piel en mayúsculas
-                  final String skinType = skinTypeRaw.toUpperCase();
+                  final String skinType = skinTypeRaw.toUpperCase().replaceAll('GRASO', 'GRASA');
                   final String? avatarUrl = profile?['avatar_url'];
 
                   return Padding(
@@ -785,6 +800,13 @@ class _PatientProfileViewState extends ConsumerState<PatientProfileView> {
                           subtitle: "Políticas y encriptación de triaje",
                           iconColor: AppColors.secondary,
                           onTap: _showPrivacyDialog,
+                        ),
+                        _buildSettingsTile(
+                          icon: Icons.verified_user_outlined,
+                          title: "Aviso de Uso Personal",
+                          subtitle: "Uso estrictamente individual de la cuenta",
+                          iconColor: AppColors.primary,
+                          onTap: () => PersonalUseDisclaimerDialog.show(context),
                         ),
                         
                         // Interruptor de Notificaciones Interactivo

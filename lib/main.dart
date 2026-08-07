@@ -66,6 +66,12 @@ class HealSkinApp extends ConsumerWidget {
         Locale('en', 'US'), // Inglés
       ],
       locale: const Locale('es', 'ES'), // Forzar Español por defecto
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
+          child: child!,
+        );
+      },
       // 3. CAMBIO CLAVE: El punto de entrada ahora es el Splash
       // Él decidirá si va a Login, Onboarding o Dashboard
       home: const SplashScreen(),

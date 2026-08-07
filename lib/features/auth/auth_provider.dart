@@ -195,14 +195,20 @@ class AuthNotifier extends StateNotifier<HealSkinAuthState> {
         });
       }
 
-      // Hacemos login automático después de registrar
+      // Si la sesión no fue activada de inmediato (esperando confirmación por correo)
+      if (response.session == null || response.user?.emailConfirmedAt == null) {
+        state = state.copyWith(isLoading: false);
+        return "Por favor, confirma tu correo electrónico antes de ingresar. Te hemos enviado un enlace de verificación.";
+      }
+
+      // Si el correo ya fue verificado o no requiere confirmación, hace login automático
       return await login(email, password);
     } on AuthException catch (e) {
       state = state.copyWith(isLoading: false);
-      return e.message;
+      return _translateAuthError(e.message);
     } catch (e) {
       state = state.copyWith(isLoading: false);
-      return e.toString();
+      return "Error de conexión al registrar usuario";
     }
   }
 
@@ -449,10 +455,10 @@ class AuthNotifier extends StateNotifier<HealSkinAuthState> {
       return null;
     } on AuthException catch (e) {
       state = state.copyWith(isLoading: false);
-      return e.message;
+      return _translateAuthError(e.message);
     } catch (e) {
       state = state.copyWith(isLoading: false);
-      return e.toString();
+      return "Error al actualizar perfil";
     }
   }
 
@@ -467,10 +473,10 @@ class AuthNotifier extends StateNotifier<HealSkinAuthState> {
       return null;
     } on AuthException catch (e) {
       state = state.copyWith(isLoading: false);
-      return e.message;
+      return _translateAuthError(e.message);
     } catch (e) {
       state = state.copyWith(isLoading: false);
-      return e.toString();
+      return "Error al solicitar restablecimiento de contraseña";
     }
   }
 
@@ -487,15 +493,54 @@ class AuthNotifier extends StateNotifier<HealSkinAuthState> {
       return null;
     } on AuthException catch (e) {
       state = state.copyWith(isLoading: false);
-      return e.message;
+      return _translateAuthError(e.message);
     } catch (e) {
       state = state.copyWith(isLoading: false);
-      return e.toString();
+      return "Error al actualizar la contraseña";
     }
   }
 
   void clearPasswordRecoveryFlag() {
     state = state.copyWith(isPasswordRecovery: false);
+  }
+
+  String _translateAuthError(String rawError) {
+    final lower = rawError.toLowerCase();
+    
+    if (lower.contains("same password") || 
+        lower.contains("should be different") || 
+        lower.contains("different from old") ||
+        lower.contains("new password should be different")) {
+      return "La nueva contraseña debe ser diferente a la contraseña anterior.";
+    }
+    if (lower.contains("user already registered") || 
+        lower.contains("already exists") ||
+        lower.contains("email already in use") ||
+        lower.contains("already registered")) {
+      return "El correo electrónico ya se encuentra registrado en el sistema.";
+    }
+    if (lower.contains("invalid login credentials") || 
+        lower.contains("invalid credentials") ||
+        lower.contains("invalid email or password")) {
+      return "Correo electrónico o contraseña incorrectos.";
+    }
+    if (lower.contains("password should be at least")) {
+      return "La contraseña debe tener al menos 6 caracteres.";
+    }
+    if (lower.contains("rate limit") || lower.contains("too many requests")) {
+      return "Has realizado demasiados intentos. Por favor, espera un momento e inténtalo de nuevo.";
+    }
+    if (lower.contains("token has expired") || lower.contains("link is expired") || lower.contains("expired")) {
+      return "El enlace ha expirado o ya no es válido. Por favor, solicita uno nuevo.";
+    }
+    if (lower.contains("email not confirmed")) {
+      return "Debes confirmar tu correo electrónico antes de ingresar.";
+    }
+    if (lower.contains("network error") || lower.contains("failed to host") || lower.contains("socketexception")) {
+      return "Error de conexión a internet. Verifica tu red e inténtalo de nuevo.";
+    }
+    
+    return "Ocurrió un error al procesar tu solicitud. Por favor, verifica tus datos e inténtalo nuevamente.";
   }
 }
 

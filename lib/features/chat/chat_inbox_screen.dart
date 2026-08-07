@@ -7,20 +7,30 @@ import '../auth/auth_provider.dart';
 import '../doctor/doctor_patients_view.dart';
 import '../patient/views/patient_appointments_provider.dart';
 import 'chat_view.dart';
-import 'chat_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // --- PROVIDERS DE CAPA DE DATOS ---
 
-final chatInboxProvider = StreamProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+final chatInboxProvider = StreamProvider.autoDispose<List<Map<String, dynamic>>>((ref) async* {
   final supabase = Supabase.instance.client;
-  final myId = supabase.auth.currentUser!.id;
+  final user = supabase.auth.currentUser;
 
-  return supabase
+  if (user == null) {
+    yield [];
+    return;
+  }
+  final myId = user.id;
+
+  final prefs = await SharedPreferences.getInstance();
+
+  final stream = supabase
       .from('direct_messages')
       .stream(primaryKey: ['id'])
-      .order('created_at', ascending: false)
-      .map((messages) {
+      .order('created_at', ascending: false);
+
+  await for (final messages in stream) {
     final Map<String, Map<String, dynamic>> conversations = {};
+    final deletedIds = prefs.getStringList('healskin_deleted_user_ids') ?? [];
 
     for (var m in messages) {
       final senderId = m['sender_id'];
@@ -30,6 +40,9 @@ final chatInboxProvider = StreamProvider.autoDispose<List<Map<String, dynamic>>>
       if (senderId != myId && receiverId != myId) continue;
 
       final otherUserId = senderId == myId ? receiverId : senderId;
+
+      // Excluir si está en la lista de usuarios eliminados
+      if (deletedIds.contains(otherUserId)) continue;
 
       // Si ya hay un mensaje más reciente registrado para este canal, omitir
       if (conversations.containsKey(otherUserId)) continue;
@@ -41,8 +54,26 @@ final chatInboxProvider = StreamProvider.autoDispose<List<Map<String, dynamic>>>
       };
     }
 
-    return conversations.values.toList();
-  });
+    // Filtrar perfiles que ya fueron borrados de la base de datos de Supabase
+    final List<Map<String, dynamic>> validConversations = [];
+    for (final conv in conversations.values) {
+      final otherId = conv['other_user_id'] as String;
+      try {
+        final profile = await supabase.from('profiles').select('id, full_name, role').eq('id', otherId).maybeSingle();
+        if (profile == null) continue;
+        final name = (profile['full_name'] ?? '').toString();
+        final role = (profile['role'] ?? '').toString();
+        if (role == 'deleted' || name.contains('[Usuario Eliminado]') || name.contains('[Médico Rechazado]')) {
+          continue;
+        }
+        validConversations.add(conv);
+      } catch (_) {
+        // Si no existe la fila del perfil, omitir esta conversación
+      }
+    }
+
+    yield validConversations;
+  }
 });
 
 class ChatInboxScreen extends ConsumerStatefulWidget {

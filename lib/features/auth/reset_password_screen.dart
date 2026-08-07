@@ -56,12 +56,12 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
               ),
             ),
             content: const Text(
-              "Tu contraseña ha sido restablecida exitosamente. Por motivos de seguridad, por favor inicia sesión nuevamente con tus nuevas credenciales.",
-              textAlign: TextAlign.center,
+              "¡Hola! Tu contraseña ha sido restablecida exitosamente. Por motivos de seguridad, por favor inicia sesión nuevamente con tus nuevas credenciales.",
+              textAlign: TextAlign.justify,
               style: TextStyle(
                 color: AppColors.textSecondary,
                 fontSize: 14,
-                height: 1.4,
+                height: 1.5,
               ),
             ),
             actionsAlignment: MainAxisAlignment.center,
@@ -120,37 +120,40 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
               children: [
                 const SizedBox(height: 10),
                 Center(
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: const BoxDecoration(
-                      color: AppColors.surfaceDark,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.vpn_key_outlined,
-                      size: 64,
-                      color: AppColors.primary,
-                    ),
+                  child: Image.asset(
+                    'imagenes/logo_sin_fondo.png',
+                    height: 90,
+                    fit: BoxFit.contain,
                   ),
                 ),
-                const SizedBox(height: 30),
-                const Text(
-                  "Restablecer Contraseña",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                  ),
+                const SizedBox(height: 25),
+                const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.vpn_key_outlined, color: AppColors.primary, size: 26),
+                    SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        "Restablecer Contraseña",
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
                 const Text(
-                  "Crea una nueva contraseña segura para tu cuenta. Recuerda que debe contener letras y números.",
-                  textAlign: TextAlign.center,
+                  "¡Hola! Crea una nueva contraseña segura para tu cuenta. Recuerda que debe contener letras y números.",
+                  textAlign: TextAlign.justify,
                   style: TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 14,
-                    height: 1.4,
+                    height: 1.5,
                   ),
                 ),
                 const SizedBox(height: 40),

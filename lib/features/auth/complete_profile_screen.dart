@@ -215,7 +215,7 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
                       style: const TextStyle(fontSize: 14),
                       inputFormatters: [
                         FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(_dniPrefix == 'P' ? 10 : 8),
+                        LengthLimitingTextInputFormatter(_dniPrefix == 'P' ? 10 : (_dniPrefix == 'J' ? 9 : 8)),
                       ],
                       decoration: InputDecoration(
                         hintText: "Ej. 24890312",
@@ -234,8 +234,9 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
                                 if (newValue != null) {
                                   setState(() {
                                     _dniPrefix = newValue;
-                                    if (_dniPrefix != 'P' && _dniController.text.length > 8) {
-                                      _dniController.text = _dniController.text.substring(0, 8);
+                                    final maxLen = _dniPrefix == 'P' ? 10 : (_dniPrefix == 'J' ? 9 : 8);
+                                    if (_dniController.text.length > maxLen) {
+                                      _dniController.text = _dniController.text.substring(0, maxLen);
                                     }
                                   });
                                 }

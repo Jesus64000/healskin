@@ -196,20 +196,30 @@ class _PatientMapViewState extends ConsumerState<PatientMapView> {
     super.dispose();
   }
 
-  // 🚀 LÓGICA DE NEGOCIO: Redirección nativa a Google Maps GPS real
+  // 🚀 LÓGICA DE NEGOCIO: Redirección nativa a Google Maps GPS con nombre exacto de la clínica
   Future<void> _launchGoogleMaps(double lat, double lng, String name) async {
-    final Uri googleMapsUrl = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
-    final Uri googleMapsAppUrl = Uri.parse('google.navigation:q=$lat,$lng');
+    final String cleanName = name.isEmpty ? 'Centro Médico HealSkin' : name;
+    final String encodedName = Uri.encodeComponent(cleanName);
+    
+    // URI nativa para Android/iOS con etiqueta exacta de la clínica
+    final Uri geoUrl = Uri.parse('geo:$lat,$lng?q=$lat,$lng($encodedName)');
+    final Uri googleMapsSearchUrl = Uri.parse('https://www.google.com/maps/search/?api=1&query=$encodedName+$lat,$lng');
+    final Uri googleMapsDirUrl = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$lat,$lng');
+
     try {
-      // Intentar primero con el esquema nativo de navegación para abrir directamente la app
-      await launchUrl(googleMapsAppUrl, mode: LaunchMode.externalApplication);
+      if (await canLaunchUrl(geoUrl)) {
+        await launchUrl(geoUrl, mode: LaunchMode.externalApplication);
+      } else if (await canLaunchUrl(googleMapsSearchUrl)) {
+        await launchUrl(googleMapsSearchUrl, mode: LaunchMode.externalApplication);
+      } else {
+        await launchUrl(googleMapsDirUrl, mode: LaunchMode.externalApplication);
+      }
     } catch (_) {
       try {
-        // Si no se puede, usar la URL estándar en el navegador/app por defecto
-        await launchUrl(googleMapsUrl, mode: LaunchMode.externalApplication);
+        await launchUrl(googleMapsSearchUrl, mode: LaunchMode.externalApplication);
       } catch (e) {
         try {
-          await launchUrl(googleMapsUrl, mode: LaunchMode.platformDefault);
+          await launchUrl(googleMapsDirUrl, mode: LaunchMode.platformDefault);
         } catch (err) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -228,7 +238,7 @@ class _PatientMapViewState extends ConsumerState<PatientMapView> {
   Future<void> _fetchRoutePoints(LatLng start, LatLng end) async {
     if (!mounted) return;
     setState(() {
-      _routePoints = [start, end]; // Fallback inicial a línea recta
+      _isTracingRoute = true;
     });
 
     try {
@@ -258,12 +268,21 @@ class _PatientMapViewState extends ConsumerState<PatientMapView> {
           if (mounted) {
             setState(() {
               _routePoints = points;
+              _isTracingRoute = false;
             });
           }
+          return;
         }
       }
     } catch (e) {
-      debugPrint("Error al trazar ruta OSRM: $e");
+      debugPrint("Error fetching OSRM route: $e");
+    }
+
+    if (mounted) {
+      setState(() {
+        _routePoints = [start, end]; // Fallback solo si falla la red
+        _isTracingRoute = false;
+      });
     }
   }
 

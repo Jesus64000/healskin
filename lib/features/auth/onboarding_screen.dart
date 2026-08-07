@@ -28,6 +28,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       "title": "Red de Guardianes",
       "desc": "Conéctate con especialistas a través de telemedicina y encuentra centros dermatológicos cercanos.",
       "icon": "medical_services_outlined"
+    },
+    {
+      "title": "Uso Personal e Individual",
+      "desc": "HealSkin está diseñado para uso estrictamente personal. Evita prestar tu cuenta o dispositivo a terceros para preservar la precisión de tu historial clínico e IA.",
+      "icon": "verified_user_outlined"
     }
   ];
 
@@ -42,6 +47,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       case "spa_outlined": return Icons.spa_outlined;
       case "biotech_outlined": return Icons.biotech_outlined;
       case "medical_services_outlined": return Icons.medical_services_outlined;
+      case "verified_user_outlined": return Icons.verified_user_outlined;
       default: return Icons.info_outline;
     }
   }

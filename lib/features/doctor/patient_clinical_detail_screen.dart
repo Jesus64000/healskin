@@ -1202,7 +1202,7 @@ class PatientClinicalDetailScreen extends ConsumerWidget {
                       _buildInfoRow(Icons.badge_outlined, "Cédula / ID", profile['identification_id'] ?? 'No registrada'),
                       _buildInfoRow(Icons.cake_outlined, "Edad", profile['age']?.toString() ?? 'No registrada'),
                       _buildInfoRow(Icons.face_outlined, "Género", profile['gender'] ?? 'No especificado'),
-                      _buildInfoRow(Icons.spa_outlined, "Tipo de Piel", (profile['skin_type']?.toString().toUpperCase() ?? 'NO DEFINIDO')),
+                      _buildInfoRow(Icons.spa_outlined, "Tipo de Piel", (profile['skin_type']?.toString().toUpperCase() ?? 'NO DEFINIDO').replaceAll('GRASO', 'GRASA')),
                       _buildInfoRow(Icons.wb_sunny_outlined, "Brillo Facial", profile['glow_frequency'] ?? 'No respondido'),
                       _buildInfoRow(Icons.bug_report_outlined, "Propensión al Acné", profile['has_acne'] ?? 'No respondido'),
                       _buildInfoRow(Icons.warning_amber_rounded, "Alergias", profile['allergies'] ?? 'Ninguna especificada'),
@@ -1524,7 +1524,17 @@ class PatientClinicalDetailScreen extends ConsumerWidget {
                 const SizedBox(height: 30),
 
                 // 3.9. SECCIÓN: PROCEDIMIENTOS DE SEGUIMIENTO (NUEVO) 🚀
-                const Text("Procedimientos", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text("Procedimientos", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                    TextButton.icon(
+                      onPressed: () => _showAddProcedureModal(context, ref, currentDoctorId),
+                      icon: const Icon(Icons.add_circle_outline, size: 18, color: AppColors.primary),
+                      label: const Text("Agregar Procedimiento", style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13)),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 15),
 
                 if (proceduresHistory.isEmpty)
@@ -1536,7 +1546,21 @@ class PatientClinicalDetailScreen extends ConsumerWidget {
                       borderRadius: BorderRadius.circular(15),
                       border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
                     ),
-                    child: const Center(child: Text("El paciente no tiene procedimientos registrados.", style: TextStyle(color: AppColors.textSecondary))),
+                    child: Column(
+                      children: [
+                        const Text("El paciente no tiene procedimientos registrados.", style: TextStyle(color: AppColors.textSecondary)),
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          onPressed: () => _showAddProcedureModal(context, ref, currentDoctorId),
+                          icon: const Icon(Icons.add, size: 16, color: AppColors.primary),
+                          label: const Text("Recetar Procedimiento", style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 12)),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: AppColors.primary),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ],
+                    ),
                   )
                 else
                   ListView.builder(
@@ -1672,7 +1696,17 @@ class PatientClinicalDetailScreen extends ConsumerWidget {
                 const SizedBox(height: 30),
 
                 // 4. HISTORIAL DE NOTAS CLÍNICAS (Adaptado a tu tabla)
-                const Text("Historial Clínico (Notas)", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text("Historial Clínico (Notas)", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                    TextButton.icon(
+                      onPressed: () => _showAddNoteModal(context, ref, currentDoctorId),
+                      icon: const Icon(Icons.note_add_outlined, size: 18, color: AppColors.primary),
+                      label: const Text("Agregar Diagnóstico", style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13)),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 15),
 
                 if (notesHistory.isEmpty)
@@ -1684,7 +1718,21 @@ class PatientClinicalDetailScreen extends ConsumerWidget {
                       borderRadius: BorderRadius.circular(15),
                       border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
                     ),
-                    child: const Center(child: Text("No hay notas clínicas registradas.", style: TextStyle(color: AppColors.textSecondary))),
+                    child: Column(
+                      children: [
+                        const Text("No hay notas clínicas registradas.", style: TextStyle(color: AppColors.textSecondary)),
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          onPressed: () => _showAddNoteModal(context, ref, currentDoctorId),
+                          icon: const Icon(Icons.add, size: 16, color: AppColors.primary),
+                          label: const Text("Registrar Primer Diagnóstico", style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 12)),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: AppColors.primary),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ],
+                    ),
                   )
                 else
                   ListView.builder(

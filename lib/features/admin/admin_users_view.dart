@@ -420,7 +420,7 @@ class AdminUserDetailScreen extends ConsumerWidget {
                       decoration: _cardDecoration(),
                       child: Column(
                         children: [
-                          _buildDetailRow(Icons.spa_outlined, "Tipo de Piel", (user['skin_type']?.toString().toUpperCase() ?? 'NO DETERMINADO')),
+                          _buildDetailRow(Icons.spa_outlined, "Tipo de Piel", (user['skin_type']?.toString().toUpperCase() ?? 'NO DETERMINADO').replaceAll('GRASO', 'GRASA')),
                           _buildDetailRow(Icons.cake_outlined, "Edad", user['age']?.toString() ?? 'No registrada'),
                           _buildDetailRow(Icons.face_outlined, "Género", user['gender'] ?? 'No especificado'),
                           _buildDetailRow(Icons.warning_amber_rounded, "Alergias Conocidas", user['allergies'] ?? 'Ninguna'),

@@ -88,43 +88,66 @@ final myAppointmentsProvider = StreamProvider.autoDispose<List<Map<String, dynam
   }
 });
 
-// 4. LA FUNCIÓN PARA AGENDAR LA CITA
+// 4. ESTRUCTURA Y FUNCIÓN PARA CONSULTAR Y AGENDAR CITAS
+class DoctorDayAvailability {
+  final bool isAllDayBlocked;
+  final String? blockReason;
+  final List<TimeOfDay> occupiedSlots;
+  final List<TimeOfDay> blockedSlots;
+  final Map<String, String> slotReasons; // Mapea slot key a motivo de bloqueo
+
+  DoctorDayAvailability({
+    required this.isAllDayBlocked,
+    this.blockReason,
+    required this.occupiedSlots,
+    required this.blockedSlots,
+    required this.slotReasons,
+  });
+}
+
 class AppointmentController {
   final SupabaseClient supabase = Supabase.instance.client;
 
-  Future<void> _checkDoctorAvailability(String doctorId, DateTime date, {String? ignoreAppointmentId}) async {
-    final startOfDay = DateTime(date.year, date.month, date.day, 0, 0, 0).toUtc();
-    final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59).toUtc();
+  Future<DoctorDayAvailability> getDoctorDayAvailability(String doctorId, DateTime date) async {
+    final localDate = date.toLocal();
+    final localStart = DateTime(localDate.year, localDate.month, localDate.day, 0, 0, 0);
+    final localEnd = DateTime(localDate.year, localDate.month, localDate.day, 23, 59, 59);
 
-    var query = supabase
+    final startOfDayUtc = localStart.toUtc().toIso8601String();
+    final endOfDayUtc = localEnd.toUtc().toIso8601String();
+
+    final existingApts = await supabase
         .from('appointments')
         .select()
         .eq('doctor_id', doctorId)
         .eq('status', 'scheduled')
-        .gte('appointment_date', startOfDay.toIso8601String())
-        .lte('appointment_date', endOfDay.toIso8601String());
+        .gte('appointment_date', startOfDayUtc)
+        .lte('appointment_date', endOfDayUtc);
 
-    if (ignoreAppointmentId != null) {
-      query = query.neq('id', ignoreAppointmentId);
-    }
-
-    final existingApts = await query;
+    bool isAllDayBlocked = false;
+    String? dayBlockReason;
+    final List<TimeOfDay> occupiedSlots = [];
+    final List<TimeOfDay> blockedSlots = [];
+    final Map<String, String> slotReasons = {};
 
     for (final apt in existingApts) {
       final String reasonStr = apt['reason'] ?? '';
       final String patientId = apt['patient_id'] ?? '';
-      final bool isBlocked = patientId == doctorId;
+      final bool isBlocked = patientId == doctorId || reasonStr.toLowerCase().contains('bloqueo');
+
+      final aptTime = DateTime.parse(apt['appointment_date']).toLocal();
 
       if (isBlocked) {
-        if (reasonStr.contains('[Jornada Completa]')) {
-          throw Exception("El médico tiene la jornada bloqueada para este día. Por favor elige otra fecha.");
-        }
-        if (reasonStr.contains('[Hasta ')) {
+        if (reasonStr.contains('[Jornada Completa]') || reasonStr.toLowerCase().contains('jornada completa')) {
+          isAllDayBlocked = true;
+          final cleanReason = reasonStr.replaceAll('[Jornada Completa]', '').replaceAll('Bloqueo :', '').trim();
+          dayBlockReason = cleanReason.isEmpty ? "Jornada bloqueada por el médico" : cleanReason;
+        } else if (reasonStr.contains('[Hasta ')) {
           final startIdx = reasonStr.indexOf('[Hasta ') + 7;
           final endIdx = reasonStr.indexOf(']', startIdx);
           if (endIdx != -1) {
-            final timeStr = reasonStr.substring(startIdx, endIdx); // "04:00 PM"
-            final parts = timeStr.split(' ');
+            final timeStr = reasonStr.substring(startIdx, endIdx); // e.g. "04:00 PM"
+            final parts = timeStr.trim().split(' ');
             if (parts.length == 2) {
               final hm = parts[0].split(':');
               if (hm.length == 2) {
@@ -134,27 +157,73 @@ class AppointmentController {
                 if (ampm == 'PM' && hour < 12) hour += 12;
                 if (ampm == 'AM' && hour == 12) hour = 0;
 
-                final blockStart = DateTime.parse(apt['appointment_date']).toLocal();
+                final blockStart = aptTime;
                 final blockEnd = DateTime(blockStart.year, blockStart.month, blockStart.day, hour, minute);
 
-                final localSelected = date.toLocal();
-                if (localSelected.isAfter(blockStart.subtract(const Duration(seconds: 1))) &&
-                    localSelected.isBefore(blockEnd.add(const Duration(seconds: 1)))) {
-                  throw Exception("El horario seleccionado está bloqueado administrativamente por el médico (${timeStr}). Por favor elige otra hora.");
+                // Marcar todos los slots de 30 mins entre blockStart y blockEnd
+                DateTime current = blockStart;
+                while (current.isBefore(blockEnd) || current.isAtSameMomentAs(blockEnd)) {
+                  final slotTime = TimeOfDay(hour: current.hour, minute: current.minute);
+                  blockedSlots.add(slotTime);
+                  slotReasons["${current.hour}:${current.minute}"] = reasonStr;
+                  current = current.add(const Duration(minutes: 30));
                 }
               }
             }
           }
+        } else {
+          // Bloqueo general en esa hora específica
+          final slotTime = TimeOfDay(hour: aptTime.hour, minute: aptTime.minute);
+          blockedSlots.add(slotTime);
+          slotReasons["${aptTime.hour}:${aptTime.minute}"] = reasonStr;
         }
       } else {
-        // Cita normal de otro paciente
-        final aptTime = DateTime.parse(apt['appointment_date']).toLocal();
-        final difference = date.toLocal().difference(aptTime).inMinutes.abs();
-        if (difference < 30) {
-          throw Exception("Este horario ya está reservado por otro paciente. Por favor elige otra hora.");
-        }
+        // Cita ocupada por otro paciente
+        final slotTime = TimeOfDay(hour: aptTime.hour, minute: aptTime.minute);
+        occupiedSlots.add(slotTime);
       }
     }
+
+    return DoctorDayAvailability(
+      isAllDayBlocked: isAllDayBlocked,
+      blockReason: dayBlockReason,
+      occupiedSlots: occupiedSlots,
+      blockedSlots: blockedSlots,
+      slotReasons: slotReasons,
+    );
+  }
+
+  Future<void> _checkDoctorAvailability(String doctorId, DateTime date, {String? ignoreAppointmentId}) async {
+    final availability = await getDoctorDayAvailability(doctorId, date);
+
+    if (availability.isAllDayBlocked) {
+      throw Exception("El médico tiene la jornada bloqueada para este día (${availability.blockReason ?? 'Motivo personal'}). Por favor elige otra fecha.");
+    }
+
+    final targetLocal = date.toLocal();
+    final targetTime = TimeOfDay(hour: targetLocal.hour, minute: targetLocal.minute);
+
+    // Verificar si la hora objetivo está bloqueada o reservada
+    for (final blocked in availability.blockedSlots) {
+      final diffMinutes = (targetTime.hour * 60 + targetTime.minute) - (blocked.hour * 60 + blocked.minute);
+      if (diffMinutes.abs() < 30) {
+        throw Exception("El horario seleccionado (${_formatTime(targetTime)}) está bloqueado por el médico. Por favor elige otra hora.");
+      }
+    }
+
+    for (final occupied in availability.occupiedSlots) {
+      final diffMinutes = (targetTime.hour * 60 + targetTime.minute) - (occupied.hour * 60 + occupied.minute);
+      if (diffMinutes.abs() < 30) {
+        throw Exception("El horario de las ${_formatTime(targetTime)} ya se encuentra reservado por otro paciente. Por favor elige otra hora.");
+      }
+    }
+  }
+
+  String _formatTime(TimeOfDay time) {
+    final hour = time.hourOfPeriod == 0 ? 12 : time.hourOfPeriod;
+    final minute = time.minute.toString().padLeft(2, '0');
+    final period = time.period == DayPeriod.am ? 'AM' : 'PM';
+    return '$hour:$minute $period';
   }
 
   Future<void> bookAppointment({
@@ -189,7 +258,7 @@ class AppointmentController {
       }
 
     } catch (e) {
-      throw Exception("Error al agendar la cita: $e");
+      throw Exception(e.toString().replaceAll("Exception: ", ""));
     }
   }
 
@@ -231,9 +300,14 @@ class AppointmentController {
         'reason': reason,
       }).eq('id', appointmentId);
     } catch (e) {
-      throw Exception("Error al actualizar la cita: $e");
+      throw Exception(e.toString().replaceAll("Exception: ", ""));
     }
   }
 }
 
 final appointmentControllerProvider = Provider((ref) => AppointmentController());
+
+final doctorDayAvailabilityProvider = FutureProvider.family.autoDispose<DoctorDayAvailability, ({String doctorId, DateTime date})>((ref, arg) async {
+  final controller = ref.read(appointmentControllerProvider);
+  return await controller.getDoctorDayAvailability(arg.doctorId, arg.date);
+});

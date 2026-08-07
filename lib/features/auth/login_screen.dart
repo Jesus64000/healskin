@@ -12,6 +12,7 @@ import '../doctor/doctor_dashboard.dart';
 import '../doctor/doctor_setup_screen.dart';
 import '../doctor/doctor_pending_approval_screen.dart';
 import '../patient/patient_dashboard.dart';
+import '../../core/widgets/personal_use_disclaimer_dialog.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -282,6 +283,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         text: "¿No tienes cuenta? ",
                         style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
                         children: [TextSpan(text: "Regístrate aquí", style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 12))]
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Center(
+                  child: InkWell(
+                    onTap: () => PersonalUseDisclaimerDialog.show(context),
+                    borderRadius: BorderRadius.circular(8),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      child: Text(
+                        "📌 HealSkin es de uso estrictamente personal. Ver aviso de uso.",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: AppColors.textSecondary, fontSize: 10, decoration: TextDecoration.underline),
+                      ),
                     ),
                   ),
                 ),
